@@ -1,0 +1,126 @@
+\documentclass{article}
+
+\usepackage{fullpage}
+\usepackage{listings}
+\usepackage{color}
+
+\setlength{\parskip}{0.5em}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{
+  language=C,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+\title{Pintos Task 0 : Codebase Preview}
+\author{Ben Sheng Tan}
+
+\begin{document}
+\maketitle
+
+\section*{Questions and Answers }
+
+\subsection*{Question 1 - (1 mark)}
+\textit{Which Git command should you run to retrieve a copy of your group's shared Pintos repository in your local directory?}
+\\ \\
+To retrieve a copy of the group's shared Pintos repository, run the following command:
+$$\texttt{git clone https://gitlab.doc.ic.ac.uk/lab1617\_spring/pintos\_<gnum>.git}$$
+replacing $\texttt{<gnum>}$ with group number, which can be found on the GitLab website. Then use our credentials to clone the repository.
+
+\subsection*{Question 2 - (1 mark)}
+\textit{Why is using the strcpy() function to copy strings usually a bad idea?}
+\\ \\
+As explained in Appendix C.3, \texttt{strcpy()} is an Unsafe String Function. The function takes in two parameters, which the first being the destination string and the second being the input string. It does not require length of input string as a parameter and thus relies on the null-terminator character.
+\par
+If the input string is larger than the destination string or doesnt end with the null character, it is possible to overflow the buffer reserved for its destination string and overwrite important data. Example:
+\begin{lstlisting}
+  char src[] = "pintos";  // String of length 7 including null \0 char at end of string
+  char dst[5];             // Destination buffer
+  strcpy(dst, src);        // buffer overflow
+\end{lstlisting}
+
+
+\subsection*{Question 3 - (1 mark)}
+\textit{In Pintos, what is the default length (in ticks and in seconds) of a scheduler time slice?}
+\\ \\
+A time slice, declared in threads/thread.c, has a duration of 4 ticks and the timer frequency, declared in devices/timer.h, has a default value of 100Hz. Hence there are 100 ticks per second and by taking ratio, we derive that a time slice lasts 0.04 seconds.
+
+\subsection*{Question 4 - (6 marks)}
+\textit{Explain how thread scheduling in Pintos currently works in less than 300 words. Include the chain of execution of function calls.}
+\\ \\
+By default, \texttt{thread\_mlfqs} in thread/thread.c is set to be false and thread scheduling in Pintos will work using round-robin scheduler. When Pintos is launched, the system timer starts and the system clock triggers an interrupt at each tick. \texttt{intr\_entry} is called first before calling \texttt{intr\_handler}, which in turn calling \texttt{timer\_interrupt}. This function will then increase the number of system ticks and call \texttt{thread\_tick} , which later calls \texttt{intr\_yield\_on\_return} to investigate whether the thread has run for \texttt{TIME\_SLICE} ticks. On the other hand, \texttt{intr\_handler} will call \texttt{thread\_yield}, which calls \texttt{schedule} to initiate the context-switch and the current thread is recorded using the \texttt{running\_thread} function.
+\par
+ All interrupts are disabled using the function \texttt{intr\_disable} to prevent other running threads from interrupting the context switching.  The next oldest thread in list of ready threads(\texttt{ready\_list}) will be selected by calling \texttt{next\_thread\_to\_run}.  If \texttt{ready\_list} is empty,  the function will take \texttt{ idle\_thread } as the next thread. Otherwise the next thread is popped from \texttt{ready\_list} then is returned.
+ \par
+ If \texttt{next\_thread\_to\_run} is different from the current thread, \texttt{switch\_threads} is used to set next thread as new running thread. The mechanics of a context switch can be found in \texttt{threads/switch.S} for switch\_threads. The previous thread is returned from \texttt{switch\_threads} and is used as an argument for the function \texttt{thread\_
+ schedule\_tail}. This function sets the currently running thread's status to \texttt{THREAD\_RUNNING} and restore \texttt{thread\_ticks} to 0. As a new thread has begun, a new time slice is created and the duration of the running thread is tracked. It will be destroyed if the previous running thread is dying.
+
+\subsection*{Question 5 - (2 marks)}
+\textit{Explain the property of reproducibility and how the lack of reproducibility will affect debugging.}
+\\ \\
+Reproducibility ensures that the same inputs in the same environment will always produce the same outputs, regardless of the number of times it runs. Pintos does not ensure this, because system timer interrupts are triggered irregularly, meaning that bugs may appear and disappear with repeated tests. Since Pintos' behaviour is not deterministic, a test might pass in context A but fail in context B. As the operation system doesnt behave the same every time, running Pintos and debugging with context B is not always possible.
+
+\subsection*{Question 6 - (2 marks)}
+\textit{In Pintos, how would you print an unsigned 64 bit int?}
+
+\begin{enumerate}
+\item The first way includes \textbf{\texttt{<inttypes.h>}} at the header, which allows formatting the types it defines with
+printf(). For every \texttt{uintn\_t} defined by \texttt{<stdint.h>} , it provides macro PRIon, PRIun, PRIux, and PRIuX. Example for printing an unsigned 64 bit int is:
+
+  \begin{lstlisting} =
+    uint64_t bigNum = 1000000; //whatever big number actually
+    printf("number=%08"PRIu64"\n", bigNum);
+   \end{lstlisting}
+
+\item The second way includes \textbf{\texttt{<stdio.h>}} at the header, which contains some new type modifiers for printing standard types, printf(). For this case, \texttt{'j'} is used for \texttt{uintmax\_t} :
+
+  \begin{lstlisting} =
+    uint64_t bigNum = 2000000; //whatever big number actually
+    printf("number=%ju\n", bigNum);
+   \end{lstlisting}
+
+\end{enumerate}
+
+
+\subsection*{Question 7 - (3 marks)}
+\textit{Describe the data structures and functions that locks and semaphores in Pintos have in common. What extra property do locks have that semaphores do not?}
+\\ \\
+A lock holds a semaphore as a member. Both have an unsigned integer and a list, used to store waiting threads. Locks have similar behaviour and structure to semaphore: a lock's equivalent of \textbf{\textit{"up"}} operation in semaphore is called \textbf{\textit{"release"}}, and the \textbf{\textit{"down"}} operation in semaphore is called \textbf{\textit{"acquire"}}.
+\par
+Both have an initializer which initiates their fields and are used as signal to disable interrupts and control threads. Semaphores initialized to 0, are used to signal completion of events that only happen exactly once. A separate thread than was created inside another can \textit{'up'} the semaphore, while the waiting thread \textit{'downs'} the semaphore. A semaphore initialized to 1 is typically used for controlling access to a resource. Before a block of code starts using the resource, it \textit{'downs'} the semaphore, then after it is done with the resource it \textit{'ups'} the resource.
+\par
+A lock is a specialization of a semaphore with an initial value of 1.  The difference between a lock and such a semaphore is twofold.  First, a semaphore can have a value greater than 1, but a lock can only be owned by at most a single thread at any given time. A locks is not "recursive", that is, it is an error for the thread currently holding a lock to try to acquire that lock. Second, a semaphore does not have an owner, meaning that one thread can "down" the semaphore and then another one "up" it, but with a lock the same thread must both acquire and release it.
+
+
+\subsection*{Question 8 - (3 marks)}
+\textit{In Pintos, a thread is characterized by a struct and an execution stack. What are the limitations on the size of these data structures? Explain how this relates to stack overflow and how Pintos identifies it.}
+\\ \\
+The specification suggests that the struct thread should be \textit{under 1kB in size}. It must not be allowed to grow too big. Otherwise, there is no enough room for the execution stack. The maximum size for a thread execution stack is \textit{4kB} and grows downwards from this offset. It must not be allowed to grow too large to avoid the occurrence of stack overflow that corrupt the thread state.
+\par
+Stack overflow is detected by the \textbf{\textit{magic}} member of  the running thread's \texttt{struct\ thread}. If this value is changed or is not set to  \texttt{THREAD\_MAGIC}, stack overflow likely occurred. The change is checked at every call by \texttt{thread\_current()}.
+
+
+\subsection*{Question 9 - (1 mark)}
+\textit{If test src/tests/devices/alarm-multiple fails, where would you find its output and result logs? Provide both paths and file names.}
+\\ \\
+If test `src/tests/devices/alarm-multiple' failed, its output would be \texttt{src/devices/build/tests/devices/
+alarm-multiple.output}, with file name \texttt{alarm-multiple.output} and the result logs would be \texttt{src/devices/
+build/tests/devices/alarm-multiple.result}, with file name \texttt{alarm-multiple.result} .
+
+\subsection*{Question 10 - (30 marks) - The Alarm Clock}
+
+\textit{ Kindly refer to Coding the Alarm Clock in Pintos and Task 0 Design Document}.
+
+\end{document}
