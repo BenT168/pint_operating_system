@@ -2,7 +2,7 @@
 
 # Expects to be called from with a given task's build directory
 
-# Relative path to GDB macros file within Pintos repo.  
+# Relative path to GDB macros file within Pintos repo.
 # Customize for your machine if required.
 GDBMACROS=../../misc/gdb-macros
 
@@ -11,6 +11,11 @@ if command -v i386-elf-gdb >/dev/null 2>&1; then
 	GDB=i386-elf-gdb
 else
 	GDB=gdb
+fi
+
+UNAME_S=`uname -s`
+if [[  $UNAME_S == 'Darwin' ]]
+then GDB=i686-elf-gdb
 fi
 
 # Run GDB.

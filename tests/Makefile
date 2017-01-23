@@ -34,7 +34,7 @@ endef
 
 define test-clean
 cd $@/src/$(TASK)/build && $(MAKE) clean
-cd $@/src/$(TASK)/build && set `find -type f` > /dev/null && test $$# = 1
+cd $@/src/$(TASK)/build && set `find . -type f` > /dev/null && test $$# = 1
 endef
 
 define clean
@@ -62,7 +62,7 @@ devices::
 threads::
 	$(mk-sandbox)
 	$(compile)
-	$(run-tests) 
+	$(run-tests)
 	$(test-clean)
 	$(clean)
 userprog vm filesys::

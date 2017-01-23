@@ -1,0 +1,152 @@
+\documentclass{article}
+
+\usepackage{fullpage}
+\usepackage{listings}
+\usepackage{color}
+
+\setlength{\parskip}{0.5em}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{
+  language=C,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+\title{Pintos Task 1: Scheduling Design Document}
+\author{Group 07: Ben Sheng Tan, Adanna Akwataghibe, Mark Aduol, Alessio Incitti }
+
+\begin{document}
+\maketitle
+
+\section{PRIORITY SCHEDULING}
+
+\subsection{ DATA STRUCTURES}
+
+\subsection*{A1: (5 marks) }
+
+\textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
+\\ \\
+TOAMEND
+A \texttt{"sleep\_sema"} in \texttt{devices/timer.c} is semaphores used to block the sleeping threads. Ordered by increasing number of \texttt{wake\_up} tick semaphores and initialised in \texttt{timer\_init()}.
+
+\begin{lstlisting}
+    /* TASK O: Semaphores used to block the sleeping threads */
+    static struct list sleep_sema;
+\end{lstlisting}
+\hfill \break
+Added to struct thread:
+
+\begin{lstlisting}
+    int64_t wake_up_tick;  /* Keep track the tick when sleeping thread wakes up */
+\end{lstlisting}
+
+
+\subsection*{A2: (10 marks) }
+
+\textit{Explain the data structure used to track priority donation. Give a diagram that illustrates a nested donation in your structure.}
+\\ \\
+TOWRITE
+
+\subsection{ALGORITHMS}
+
+\subsubsection*{A3: (5 marks) }
+\textit{How do you ensure that the highest priority thread waiting for a lock, semaphore, or condition variable wakes up first?}
+\\ \\
+TOWRITE
+
+\subsubsection*{A4: (5 marks) }
+\textit{Describe the sequence of events when a call to \texttt{lock\_acquire()} causes a priority donation.  How is nested donation handled?}
+\\ \\
+TOWRITE
+
+\subsubsection*{A5: (5 marks) }
+\textit{Describe the sequence of events when \texttt{lock\_release()} is called on a lock that a higher-priority thread is waiting for.}
+\\ \\
+TOWRITE
+
+\subsection{SYNCHRONIZATION}
+
+\subsubsection*{A6: (5 marks) }
+\textit{Describe a potential race in \texttt{thread\_set\_priority()} and explain how your implementation avoids it.  Can you use a lock to avoid this race?}
+\\ \\
+TOWRITE
+
+
+\subsection{RATIONALE}
+
+\subsubsection*{A7: (5 marks) }
+\textit{Why did you choose this design?  In what ways is it superior to another design you considered?}
+\\ \\
+TOWRITE
+
+
+\section{ADVANCED SCHEDULER}
+
+\subsection{DATA STRUCTURES}
+
+\subsection*{B1: (5 marks) }
+
+\textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
+\\ \\
+TOWRITE
+
+
+\subsection{ALGORITHMS}
+
+\subsubsection*{B2: (5 marks) }
+\textit{HSuppose threads A, B, and C have nice values 0, 1, and 2.  Each has a \texttt{recent\_cpu} value of 0.  Fill in the table below showing the scheduling decision and the priority and \texttt{recent\_cpu} values for each thread after each given number of timer ticks:}
+
+\begin{table}[htb]
+\centering
+\begin{tabular}{llllllll}
+\multirow{2}{*}{\begin{tabular}[c]{@{}c@{}}timer\\ ticks\end{tabular}} & \multicolumn{3}{c|}{recent\_cpu} & \multicolumn{3}{c|}{priority} & thread to run \\ \cline{2-8}
+                                                                       & A         & B         & C        & A        & B        & C       &               \\ \hline
+                                                                       0           &          &          &         &        &        &       &              \\ \hline
+                                                                       4           &          &          &         &        &        &       &              \\ \hline
+                                                                       8           &          &          &         &        &        &       &              \\ \hline
+                                                                       12          &          &          &         &        &        &       &              \\ \hline
+                                                                       16          &          &          &         &        &        &       &              \\ \hline
+                                                                       20          &          &          &         &        &        &       &              \\ \hline
+                                                                       24          &          &          &         &        &        &       &              \\ \hline
+                                                                       28          &          &          &         &        &        &       &              \\ \hline
+                                                                       32          &          &          &         &        &        &       &              \\ \hline
+                                                                       36          &          &          &         &        &        &       &              \\ \hline
+                                                                       \end{tabular}
+\end{table}
+
+\subsubsection*{B3: (5 marks) }
+\textit{Did any ambiguities in the scheduler specification make values in the table uncertain?  If so, what rule did you use to resolve them?  Does this match the behaviour of your scheduler?}
+\\ \\
+TOWRITE
+
+\subsubsection*{B4: (5 marks) }
+\textit{How is the way you divided the cost of scheduling between code inside and outside interrupt context likely to affect performance?}
+\\ \\
+TOWRITE
+
+\subsection{RATIONALE}
+
+\subsubsection*{B5: (5 marks) }
+\textit{Briefly critique your design, pointing out advantages and disadvantages in your design choices.}
+\\ \\
+TOWRITE
+
+\subsubsection*{B6: (5 marks) }
+\textit{The assignment explains arithmetic for fixed-point mathematics in detail, but it leaves it open to you to implement it.  Why did you decide to implement it the way you did?  If you created an abstraction layer for fixed-point mathematics, that is, an abstract data type and/or a set of functions or macros to manipulate fixed-point numbers, why did you do so?  If not, why not?S}
+\\ \\
+TOWRITE
+
+
+\end{document}
