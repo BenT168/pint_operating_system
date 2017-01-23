@@ -144,4 +144,6 @@ int thread_get_load_avg (void);
 
 struct thread *thread_for_sema_list_elem (const struct list_elem *);
 
+bool is_lower_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 #endif /* threads/thread.h */
