@@ -210,6 +210,12 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* If the new thread has higher priority than the currently running thread
+     then thread_yield() to let the former run first. */
+  if (t->priority > thread_current()->priority) {
+    thread_yield();
+  }
+
   return tid;
 }
 
@@ -341,15 +347,26 @@ thread_foreach (thread_action_func *func, void *aux)
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY.
-   This function assumes ready_list is a priority-wise sorted list*/
+   This function assumes ready_list is a priority-wise sorted list. */
 void
 thread_set_priority (int new_priority)
 {
-  if (new_priority >= PRI_MIN && new_priority <= PRI_MAX) {
-    thread_current ()->priority = new_priority;
-    if (list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority) {
-      thread_yield();
-    }
+  ASSERT (new_priority >= PRI_MIN);
+  ASSERT (new_priority <= PRI_MAX);
+
+  thread_current ()->priority = new_priority;
+
+  /* If the thread setting a new priority is a thread in ready_list then change
+     its position in the list accordingly (remove and re-insert). */
+  if (thread_current()->status == THREAD_READY) {
+    list_remove (&thread_current()->elem);
+    list_insert_ordered(&ready_list, &thread_current()->elem, &is_lower_priority, NULL);
+  }
+
+  /* If the thread at the front of the list has now higher priority than the currently
+     running thread then thread_yield() to let the former run first. */
+  if (list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority) {
+    thread_yield();
   }
 }
 
@@ -357,7 +374,7 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void)
 {
-  return thread_current ()->priority; //TODO: when priority donation is enabled use a new struct member for effective priority and return it here
+  return thread_current ()->priority; //TODO: when priority donation is enabled change priority into eff_priority
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -604,10 +621,13 @@ struct thread *thread_for_sema_list_elem (const struct list_elem *lelem) {
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* Function ready_list sorting is based on */
+/* Function used as criterium to sort ready_list */
 bool is_lower_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-   struct thread *threadA = list_entry(a, struct thread, elem);
-   struct thread *threadB = list_entry(b, struct thread, elem);
+  ASSERT(a != NULL);
+  ASSERT(b != NULL);
 
-   threadA->priority < threadB->priority; //TODO: Change priority with effective_priority as soon as it is introduced
+  struct thread *threadA = list_entry(a, struct thread, elem);
+  struct thread *threadB = list_entry(b, struct thread, elem);
+
+  return (threadA->priority < threadB->priority); //TODO: Change priority into eff_priority when priority donation is enabled
 }
