@@ -91,7 +91,7 @@ timer_elapsed (int64_t then)
 
 /* Comparator function that returns true if the thread A wakes up before
    thread B using number of wake_up_tick */
-static bool less_sema_ticks (const struct list_elem *a,
+bool less_sema_ticks (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux) {
   int64_t *ticks_ptr = (int64_t*) aux;
@@ -120,7 +120,7 @@ timer_sleep (int64_t ticks)
   /* Add the new sleep_thread to list acting as a priority queue
    i.e. The threads that have to sleep the longest will be at the end
    of the queue */
-  list_insert_ordered(&sleep_sema, &sema_elem.elem, less_sema_ticks, &ticks);
+  list_insert_ordered(&sleep_sema, &sema_elem.elem, &less_sema_ticks, &ticks);
 
   intr_set_level (old_level);
 
