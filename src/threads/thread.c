@@ -20,6 +20,14 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+/* TASK 1 */
+
+/* Maximum priority ceiling over all locks acquired by threads other than
+   the running thread. */
+int max_priority_ceiling;
+
+/* END TASK 1 */
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -87,12 +95,12 @@ static tid_t allocate_tid (void);
 void
 thread_init (void)
 {
+  printf("Thread initialization\n");
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -112,6 +120,7 @@ thread_start (void)
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
+  printf("Thread start\n");
 
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
@@ -224,6 +233,10 @@ thread_block (void)
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
+  printf("Thread Blocking...\n");
+
+  update_max_prio_ceil (thread_current ()->t_max_prio_ceil);
+
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -245,8 +258,16 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+
+  printf("Thread unblocking...\n");
+
+  list_insert_ordered (&ready_list, &t->elem, comparator_prio, NULL);
   t->status = THREAD_READY;
+
+  if (t->priority > thread_current ()->priority)
+  {
+    thread_yield ();
+  }
   intr_set_level (old_level);
 }
 
@@ -290,6 +311,8 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
+  printf("Thread exiting...\n");
+
 #ifdef USERPROG
   process_exit ();
 #endif
@@ -298,8 +321,15 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
+
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
+
+  // Recompute max_priority_ceiling by iterating over all non-running
+  // threads, except this one, and comparing their t_max_prio_ceil values with
+  // max_priority_ceiling.
+  thread_foreach (t_update_max_prio_ceil, NULL);
+
   schedule ();
   NOT_REACHED ();
 }
@@ -314,9 +344,15 @@ thread_yield (void)
 
   ASSERT (!intr_context ());
 
+  printf("Thread yielding...\n");
+
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_push_back (&ready_list, &cur->elem);
+  {
+    update_max_prio_ceil (cur->t_max_prio_ceil);
+    list_insert_ordered (&ready_list, &cur->elem, comparator_prio, NULL);
+  }
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -343,7 +379,25 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
+  ASSERT (new_priority >= PRI_MIN);
+  ASSERT (new_priority <= PRI_MAX);
+
+  enum intr_level old_level = intr_disable ();
+
   thread_current ()->priority = new_priority;
+
+  if (thread_current ()->status == THREAD_READY)
+  {
+    // Re-sort list in ascending order of priority.
+    list_sort (&ready_list, comparator_prio, NULL);
+    struct thread *t = list_entry (list_head (&ready_list), struct thread,
+                                   elem);
+    if (t->priority > new_priority)
+    {
+      thread_yield ();
+    }
+  }
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -472,6 +526,19 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  /* TASK 1 */
+
+  t->original_priority = priority;
+  struct list acq_locks;
+  list_init (&acq_locks);
+  t->acquired_locks = &acq_locks;
+
+  /* END TASK 1 */
+
+  /* Initialize 'sleep_sema' to 0; it will be used as a binary semaphore for
+     synchronising a thread's sleep and wake-up times. */
+  sema_init (&t->sleep_sema, 0);
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -568,8 +635,21 @@ schedule (void)
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
 
+  ASSERT (next->t_max_prio_ceil <= max_priority_ceiling);
+
+  printf("In 'schedule()'\nRunning thread id: %d\nNext thread id: %d\n\n", cur->tid, next->tid);
+
   if (cur != next)
+  {
+    if (next->t_max_prio_ceil == max_priority_ceiling)
+    {
+      struct list_elem *max_elem = list_max (&ready_list,
+                                             comparator_prio_ceil, NULL);
+      struct thread *t = list_entry (max_elem, struct thread, elem);
+      max_priority_ceiling = t->t_max_prio_ceil;
+    }
     prev = switch_threads (cur, next);
+  }
   thread_schedule_tail (prev);
 }
 
@@ -586,13 +666,47 @@ allocate_tid (void)
 
   return tid;
 }
-
-/* Returns the thread associated with a sema_elem */
-struct thread *thread_for_sema_list_elem (const struct list_elem *lelem) {
-  struct semaphore sema = list_entry (lelem, struct semaphore_elem, elem)->semaphore;
-  return list_entry (list_front (&sema.waiters), struct thread, elem);
-}
-
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+bool
+comparator_prio (const struct list_elem *elem1,
+                 const struct list_elem *elem2,
+                 void *aux)
+{
+  const struct thread *t1 = list_entry (elem1, struct thread, elem);
+  const struct thread *t2 = list_entry (elem2, struct thread, elem);
+
+  return t1->priority < t2->priority;
+}
+
+bool
+comparator_prio_ceil (const struct list_elem *elem1,
+                      const struct list_elem *elem2,
+                      void *aux)
+{
+  const struct lock *l1 = list_entry (elem1, struct lock, acq_elem);
+  const struct lock *l2 = list_entry (elem2, struct lock, acq_elem);
+
+  return l1->priority_ceiling < l2->priority_ceiling;
+}
+
+/* This function should only be called under mutually exclusive conditions,
+   since it accesses an area of memory that is shared between threads - that is,
+   a critical region. */
+bool
+update_max_prio_ceil (int priority_ceiling)
+{
+  if (priority_ceiling > max_priority_ceiling)
+  {
+    max_priority_ceiling = priority_ceiling;
+  }
+}
+
+void
+t_update_max_prio_ceil (struct thread *t, void *aux)
+{
+  update_max_prio_ceil (t->t_max_prio_ceil);
+}

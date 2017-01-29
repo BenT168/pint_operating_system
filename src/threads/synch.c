@@ -66,6 +66,7 @@ sema_down (struct semaphore *sema)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
+
   while (sema->value == 0)
     {
       list_push_back (&sema->waiters, &thread_current ()->elem);
@@ -113,6 +114,7 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
+
   if (!list_empty (&sema->waiters))
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
@@ -179,6 +181,12 @@ lock_init (struct lock *lock)
 
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
+
+  /* We assume that any thread can acquire any lock. Hence, the priority
+     ceiling of every lock must be equal to the maximum possible priority of
+     a thread. */
+  printf("Lock initialization\n");
+  lock->priority_ceiling = PRI_MIN-1;
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -196,8 +204,43 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  printf("Attempt to acquire lock\n");
+  enum intr_level old_level;
+  struct semaphore *sema = &lock->semaphore;
+
+  ASSERT (sema != NULL);
+  ASSERT (!intr_context ());
+
+  old_level = intr_disable ();
+
+  struct thread *cur = thread_current ();
+
+  ASSERT (cur->priority <= lock->priority_ceiling);
+
+  while (sema->value == 0 || cur->priority <= max_priority_ceiling)
+    {
+      list_push_back (&sema->waiters, &cur->elem);
+      thread_block ();
+      printf("Thread priority: %d, lower than max_priority_ceiling: %d\nThread Id:%d", thread_current ()->priority, max_priority_ceiling, thread_current ()->tid);
+    }
+
+  // Raise priority while thread is in critical region.
+  thread_set_priority (lock->priority_ceiling);
+  // Check whether the priority ceiling of this lock is higher than the
+  // priority ceilings of all other locks that have been acquired by this
+  // thread - this value is 't_max_prio_ceil'.
+  // If this is the case, we update the 't_max_prio_ceil' accordingly.
+  if (lock->priority_ceiling > cur->t_max_prio_ceil)
+  {
+    cur->t_max_prio_ceil = lock->priority_ceiling;
+  }
+  list_insert_ordered (cur->acquired_locks, &lock->acq_elem,
+                       comparator_prio_ceil, NULL);
+  sema->value--;
+  printf("Lock acquired\n");
+  intr_set_level (old_level);
+
+  lock->holder = cur;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -231,8 +274,27 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  enum intr_level old_level = intr_disable ();
+
   lock->holder = NULL;
+
+  list_remove (&lock->acq_elem);
+  // Obtain the lock with the highest priority ceiling, out of the locks
+  // currently held by the running thread.
+  struct list_elem *max_prio_ceil_elem
+    = list_max(thread_current ()->acquired_locks,
+               comparator_prio_ceil, NULL);
+
+  struct lock *max_prio_ceil_lock = list_entry (max_prio_ceil_elem, struct
+                                                lock, acq_elem);
+  thread_current ()->t_max_prio_ceil = max_prio_ceil_lock->priority_ceiling;
+
+  // Restore original priority.
+  thread_set_priority (thread_current ()->original_priority);
+
   sema_up (&lock->semaphore);
+
+  intr_set_level (old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -246,6 +308,13 @@ lock_held_by_current_thread (const struct lock *lock)
   return lock->holder == thread_current ();
 }
 
+/* One semaphore in a list. */
+struct semaphore_elem
+  {
+    struct list_elem elem;              /* List element. */
+    struct semaphore semaphore;         /* This semaphore. */
+  };
+
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */

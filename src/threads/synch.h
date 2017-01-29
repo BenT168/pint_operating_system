@@ -4,18 +4,16 @@
 #include <list.h>
 #include <stdbool.h>
 
+/* Definition: The priority ceiling of a lock (binary semaphore / mutex)
+               is the priority of the highest priority thread that may acquire
+               the lock.
+*/
+
 /* A counting semaphore. */
 struct semaphore
   {
     unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
-  };
-
-/* One semaphore in a list. */
-struct semaphore_elem
-  {
-    struct list_elem elem;              /* List element. */
-    struct semaphore semaphore;         /* This semaphore. */
   };
 
 void sema_init (struct semaphore *, unsigned value);
@@ -27,8 +25,11 @@ void sema_self_test (void);
 /* Lock. */
 struct lock
   {
-    struct thread *holder;      /* Thread holding lock (for debugging). */
-    struct semaphore semaphore; /* Binary semaphore controlling access. */
+    struct thread *holder;       /* Thread holding lock (for debugging). */
+    struct semaphore semaphore;  /* Binary semaphore controlling access. */
+    int priority_ceiling;   /* Priority ceiling of semaphore. */
+    struct list_elem acq_elem;   /* List element for 'acquired_locks' list */
+    struct list_elem allelem;    /* List element. */
   };
 
 void lock_init (struct lock *);

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -80,7 +81,6 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
-
 struct thread
   {
     /* Owned by thread.c. */
@@ -88,8 +88,34 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
+    int priority;                       /* Dynamic priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+
+    /* TASK 1 */
+
+    /* Original (i.e: fixed) priority */
+    int original_priority;
+    /* Maximal priority ceiling over all locks acquired by this thread. */
+    int t_max_prio_ceil;
+    /* Pointer to list of locks acquired by this thread */
+    struct list *acquired_locks;
+
+    /* END TASK 1 */
+
+    /* Shared between thread.c and timer.c */
+
+    /* Wake-up time. */
+    int64_t wakeup_time;
+    /* List element for sleeping-threads list */
+    struct list_elem sleep_elem;
+
+    /* In order to guarantee that the sleeping thread is unblocked at the
+       specified time, the only thread waiting on this semaphore, must be
+       'this' thread. If more than one thread were waiting on this semaphore,
+       it is not guaranteed that 'this' thread will be the one that is
+       unblocked. Since we will only have one thread waiting on this semaphore,
+       it makes sense to simply embed it in the thread struct. */
+    struct semaphore sleep_sema;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -99,9 +125,6 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
-    /* TASK 0 */
-    int64_t wake_up_tick;               /* Keep track the tick when sleeping
-                                          thread wakes up */
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -110,6 +133,8 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+extern int max_priority_ceiling;
 
 void thread_init (void);
 void thread_start (void);
@@ -142,6 +167,14 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-struct thread *thread_for_sema_list_elem (const struct list_elem *);
+/* TASK 1 */
+bool comparator_prio (const struct list_elem *elem1,
+                      const struct list_elem *elem2,
+                      void *aux);
+bool comparator_prio_ceil (const struct list_elem *elem1,
+                           const struct list_elem *elem2,
+                           void *aux);
+bool update_max_prio_ceil (int);
+void t_update_max_prio_ceil (struct thread *t, void *aux);
 
 #endif /* threads/thread.h */

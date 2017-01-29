@@ -4,7 +4,6 @@
 #include <round.h>
 #include <stdio.h>
 #include "devices/pit.h"
-#include "lib/kernel/list.h"
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
@@ -25,23 +24,31 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+/* List of sleeping threads, i.e: threads in THREAD_BLOCKED state. */
+static struct list sleeping_threads;
+
+/* Mutex for access to 'sleeping_threads' list. Note that the implementation of
+   a lock in "synch.c" is actually equivalent to a mutex. We use a mutex when we
+   would like to restrict concurrent access of several threads to shared
+   memory. */
+static struct lock sleep_mutex;
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
-/* Semaphores used to block the sleeping threads */
-static struct list sleep_sema;
-
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
 timer_init (void)
 {
-  list_init (&sleep_sema);
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  list_init (&sleeping_threads);
+  lock_init (&sleep_mutex);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -89,43 +96,32 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-/* Comparator function that returns true if the thread A wakes up before
-   thread B using number of wake_up_tick */
-static bool less_sema_ticks (const struct list_elem *a,
-                             const struct list_elem *b,
-                             void *aux) {
-  int64_t *ticks_ptr = (int64_t*) aux;
-  return *ticks_ptr < thread_for_sema_list_elem(b)->wake_up_tick;
-}
-
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks)
 {
+  if (ticks <= 0)
+    return;
+
+  int64_t start = timer_ticks ();
+
+  struct thread *cur_thread = thread_current ();
+  cur_thread->wakeup_time = start + ticks;
+
   ASSERT (intr_get_level () == INTR_ON);
 
-  ticks += timer_ticks ();
-  thread_current ()->wake_up_tick = ticks;
+  lock_acquire (&sleep_mutex);
 
-  /* Initialise semaphore  */
-  struct semaphore_elem sema_elem;
+  /* We mainatain a list of threads sorted in ascending order of wake-up time.
+     Note that we do not actually store the entire thread in the list, but
+     rather the 'list_elem sleep_elem' in thread struct. */
+  list_insert_ordered (&sleeping_threads, &cur_thread->sleep_elem,
+                       &comparator_wakeup_time, NULL);
 
-  /* Initialise the semaphore with 0 to wait for a signal from
-     timer_interrupt() */
-  sema_init(&sema_elem.semaphore, 0);
-
-  enum intr_level old_level = intr_disable ();
-
-  /* Add the new sleep_thread to list acting as a priority queue
-   i.e. The threads that have to sleep the longest will be at the end
-   of the queue */
-  list_insert_ordered(&sleep_sema, &sema_elem.elem, less_sema_ticks, &ticks);
-
-  intr_set_level (old_level);
-
-  /* Block thread */
-  sema_down(&sema_elem.semaphore);
+  lock_release (&sleep_mutex);
+  ASSERT ((cur_thread->sleep_sema).value == 0);
+  sema_down (&cur_thread->sleep_sema);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -203,25 +199,30 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
-
-  /* Wakes up (unblocks) all threads that have slept
-     for the wake_at_ticks (member) duration of ticks */
-  struct list_elem *e = list_begin(&sleep_sema);
-
-  while (e != list_end(&sleep_sema)) {
-
-    struct thread *t = thread_for_sema_list_elem (e);
-
-    /* If it is time for the thread to wake up */
-    if(t->wake_up_tick > ticks) break;
-
-    sema_up(&list_entry(e, struct semaphore_elem, elem)->semaphore);
-    // unblock sleeping thread
-    e = list_remove(e);
-    // remove semaphores from the list
-  }
-
   thread_tick ();
+
+  struct thread *t;
+
+  /* Using a mutex here would potentially result in deadlock, so we must
+     disable interrupts. */
+  enum intr_level old_level = intr_disable ();
+
+  while (!list_empty (&sleeping_threads))
+    {
+      t = list_entry ( list_front (&sleeping_threads), struct thread,
+                       sleep_elem);
+
+      /* Pre-condition: List is sorted in ascending order of wakeup_time */
+      if (t->wakeup_time <= ticks)
+        {
+          ASSERT ((t->sleep_sema).value == 0);
+          list_pop_front (&sleeping_threads);
+          sema_up (&t->sleep_sema);
+        }
+      else
+        break;
+    }
+  intr_set_level (old_level);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -293,4 +294,19 @@ real_time_delay (int64_t num, int32_t denom)
      the possibility of overflow. */
   ASSERT (denom % 1000 == 0);
   busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
+}
+
+bool
+comparator_wakeup_time (const struct list_elem *elem1,
+                        const struct list_elem *elem2,
+                        void *aux)
+{
+  const struct thread *t1 = list_entry (elem1, struct thread, sleep_elem);
+  const struct thread *t2 = list_entry (elem2, struct thread, sleep_elem);
+
+  bool cond1 = t1->wakeup_time < t2->wakeup_time;
+  bool cond2 = t1->wakeup_time == t2->wakeup_time &&
+               t1->priority >= t2->priority;
+
+  return cond1 || cond2;
 }
