@@ -354,20 +354,27 @@ thread_set_priority (int new_priority)
   ASSERT (new_priority >= PRI_MIN);
   ASSERT (new_priority <= PRI_MAX);
 
+  enum intr_level old_level;
+  old_level = intr_disable();
+
   thread_current ()->priority = new_priority;
 
-  /* If the thread setting a new priority is a thread in ready_list then change
-     its position in the list accordingly (remove and re-insert). */
+  /* If the thread setting a new priority is a thread in ready_list then
+     change its position in the list accordingly (remove and re-insert). */
   if (thread_current()->status == THREAD_READY) {
     list_remove (&thread_current()->elem);
-    list_insert_ordered(&ready_list, &thread_current()->elem, &is_lower_priority, NULL);
+    list_insert_ordered(&ready_list, &thread_current()->elem,
+                          &is_lower_priority, NULL);
   }
 
-  /* If the thread at the front of the list has now higher priority than the currently
-     running thread then thread_yield() to let the former run first. */
-  if (list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority) {
+  /* If the thread at the front of the list has now higher priority than the
+     currently running thread then let the former run first. */
+  if (list_entry(list_begin(&ready_list), struct thread, elem)->priority
+        > new_priority) {
     thread_yield();
   }
+
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -622,7 +629,8 @@ struct thread *thread_for_sema_list_elem (const struct list_elem *lelem) {
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* Function used as criterium to sort ready_list */
-bool is_lower_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+bool is_lower_priority (const struct list_elem *a,
+                          const struct list_elem *b, void *aux UNUSED) {
   ASSERT(a != NULL);
   ASSERT(b != NULL);
 
