@@ -225,13 +225,17 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if(list_empty(&ready_list)) {
-    printf("here");
-  }
   // Test the maximum priority
   old_level = intr_disable ();
   check_max_priority();
   intr_set_level (old_level);
+
+  /* If the new thread has higher priority than the currently running thread
+     then thread_yield() to let the former run first.
+  if (t->priority > thread_current()->priority) {
+    thread_yield();
+  }
+  */
 
   return tid;
 }
@@ -269,7 +273,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, &is_lower_priority, NULL);
+  list_insert_ordered (&ready_list, &t->elem, is_lower_priority, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -340,7 +344,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_insert_ordered (&ready_list, &cur->elem, &is_lower_priority, NULL);
+    list_insert_ordered (&ready_list, &cur->elem, is_lower_priority, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -364,7 +368,7 @@ thread_foreach (thread_action_func *func, void *aux)
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY.
-   This function assumes ready_list is a priority-wise sorted list*/
+   This function assumes ready_list is a priority-wise sorted list. */
 void
 thread_set_priority (int new_priority)
 {
@@ -388,6 +392,33 @@ thread_set_priority (int new_priority)
     }
   }*/
   intr_set_level(level);
+/*
+  ASSERT (new_priority >= PRI_MIN);
+  ASSERT (new_priority <= PRI_MAX);
+
+  enum intr_level old_level;
+  old_level = intr_disable();
+
+  struct thread *cur = thread_current();
+  cur->priority = new_priority;
+
+  /* If the thread setting a new priority is a thread in ready_list then
+     change its position in the list accordingly (remove and re-insert).
+  if (cur->status == THREAD_READY) {
+    list_remove (&cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem,
+                          is_lower_priority, NULL);
+  }
+
+  /* If the thread at the front of the list has now higher priority than the
+     currently running thread then let the former run first.
+  if (list_entry(list_begin(&ready_list), struct thread, elem)->priority
+        > cur->priority) {
+    thread_yield();
+  }
+
+  intr_set_level (old_level);
+  */
 }
 
 /* Returns the current thread's priority. */
@@ -395,6 +426,7 @@ int
 thread_get_priority (void)
 {
   return thread_current ()->priority;
+
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -525,6 +557,7 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   //list_insert_ordered (&all_list, &t->allelem, &is_lower_priority, NULL);
   list_push_back (&all_list, &t->allelem);
+
   intr_set_level (old_level);
 
   t->base_priority = priority;
@@ -655,12 +688,16 @@ struct thread *thread_for_sema_list_elem (const struct list_elem *lelem) {
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* Function ready_list sorting is based on */
-bool is_lower_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-   struct thread *threadA = list_entry(a, struct thread, elem);
-   struct thread *threadB = list_entry(b, struct thread, elem);
+/* Function used as criterium to sort ready_list */
+bool is_lower_priority (const struct list_elem *a,
+                          const struct list_elem *b, void *aux UNUSED) {
+  ASSERT(a != NULL);
+  ASSERT(b != NULL);
 
-   return threadA->priority > threadB->priority; //TODO: Change priority with effective_priority as soon as it is introduced
+  struct thread *threadA = list_entry(a, struct thread, elem);
+  struct thread *threadB = list_entry(b, struct thread, elem);
+
+  return threadA->priority > threadB->priority; //TODO: Change priority with effective_priority as soon as it is introduced
 }
 
 void check_max_priority(void) {
