@@ -102,6 +102,17 @@ struct thread
     /* TASK 0 */
     int64_t wake_up_tick;               /* Keep track the tick when sleeping
                                           thread wakes up */
+
+    /* TASK 1 */
+    int base_priority;                /* initial priority of thread */
+    struct list_elem donation_thread; /* thread element that is donated */
+    struct lock* lock_waiting;        /* lock that thread is waiting for */
+    struct list threads_donated;      /* list of threads */
+
+    // Advanced scheduling
+    int cpu_num;
+    int nice;
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -145,5 +156,9 @@ int thread_get_load_avg (void);
 struct thread *thread_for_sema_list_elem (const struct list_elem *);
 
 bool is_lower_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void update_priority(void);
+void donate_priority(void);
+void check_max_priority(void);
+void remove_with_lock(struct lock* l);
 
 #endif /* threads/thread.h */

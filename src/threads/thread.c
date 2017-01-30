@@ -20,6 +20,17 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+#define NICE_DEFAULT 0
+#define NICE_MIN 20
+#define NICE_MAX 20
+
+#define CPU_NUM_DEFAULT 0
+
+#define LOAD_AVG_DEFAULT 0
+
+
+#define DEPTH_LIMIT 8
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running.
    Implemented as a priority-based sorted list. */
@@ -59,6 +70,8 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
+
+int load_avg;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -110,6 +123,8 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
+
+  load_avg = LOAD_AVG_DEFAULT;
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -209,6 +224,14 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+
+  if(list_empty(&ready_list)) {
+    printf("here");
+  }
+  // Test the maximum priority
+  old_level = intr_disable ();
+  check_max_priority();
+  intr_set_level (old_level);
 
   return tid;
 }
@@ -345,50 +368,70 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
-  if (new_priority >= PRI_MIN && new_priority <= PRI_MAX) {
+  if(thread_mlfqs) return;
+  //printf("old: %d, new: %d", thread_current()->priority, new_priority);
+  enum intr_level level = intr_disable();
+  int priority_prev = thread_current()->priority;
+  thread_current()->base_priority = new_priority;
+  update_priority();
+
+  if(priority_prev < thread_current()->priority) {
+    donate_priority();
+  }
+  if (priority_prev > thread_current()->priority) {
+    check_max_priority();
+  }
+  /*if (new_priority >= PRI_MIN && new_priority <= PRI_MAX) {
     thread_current ()->priority = new_priority;
     if (list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority) {
       thread_yield();
     }
-  }
+  }*/
+  intr_set_level(level);
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void)
 {
-  return thread_current ()->priority; //TODO: when priority donation is enabled use a new struct member for effective priority and return it here
+  return thread_current ()->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED)
 {
-  /* Not yet implemented. */
+  enum intr_level level = intr_disable();
+
+  thread_current()->nice = nice;
+  check_max_priority();
+
+  intr_set_level(level);
+
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void)
 {
-  /* Not yet implemented. */
-  return 0;
+//  return rounded_to_int(mult_mixed(load_avg, 100));
+return 0;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void)
 {
-  /* Not yet implemented. */
+  //int cpu = thread_current()->cpu_num;
   return 0;
+//  return rounded_to_int(mult_mixed(cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -480,8 +523,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
-  list_insert_ordered (&all_list, &t->allelem, &is_lower_priority, NULL);
+  //list_insert_ordered (&all_list, &t->allelem, &is_lower_priority, NULL);
+  list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+
+  t->base_priority = priority;
+  t->lock_waiting = NULL;
+  list_init(&t->threads_donated);
+
+  t->nice = NICE_DEFAULT;
+  t->cpu_num = CPU_NUM_DEFAULT;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -609,5 +660,71 @@ bool is_lower_priority (const struct list_elem *a, const struct list_elem *b, vo
    struct thread *threadA = list_entry(a, struct thread, elem);
    struct thread *threadB = list_entry(b, struct thread, elem);
 
-   threadA->priority < threadB->priority; //TODO: Change priority with effective_priority as soon as it is introduced
+   return threadA->priority > threadB->priority; //TODO: Change priority with effective_priority as soon as it is introduced
+}
+
+void check_max_priority(void) {
+
+  if(list_empty(&ready_list)) {
+    return;
+  }
+
+  struct thread* t = list_entry(list_front(&ready_list), struct thread, elem);
+
+  if(intr_context()) {
+    thread_ticks++;
+    if(thread_current ()->priority < t->priority || (thread_ticks >= TIME_SLICE
+                        && thread_current()-> priority == t->priority)) {
+      intr_yield_on_return();
+    }
+    return;
+  }
+
+    if(thread_current()->priority < t->priority) {
+      thread_yield();
+    }
+}
+
+void donate_priority(void) {
+  int depth = 0;
+  struct thread *t = thread_current();
+  struct lock *l = t->lock_waiting;
+  while(l != NULL && depth < DEPTH_LIMIT) {
+    depth++;
+
+    if(l->holder == NULL) return;
+    if(l->holder->priority >= t->priority) return;
+
+    l->holder->priority = t->priority;
+    t = l->holder;
+    l = t->lock_waiting;
+  }
+}
+
+void update_priority(void) {
+  struct thread *t = thread_current();
+  t->priority = t->base_priority;
+  if(list_empty(&t->threads_donated)) {
+    return;
+  }
+  struct thread *t2 = list_entry(list_front(&t->threads_donated),
+                               struct thread, donation_thread);
+
+  if(t2->priority > t->priority) {
+     t->priority = t2->priority;
+   }
+  }
+
+
+void remove_with_lock(struct lock* l) {
+  struct list_elem* e = list_begin(&thread_current()->threads_donated);
+  struct list_elem* next;
+  while(e != list_end(&thread_current()->threads_donated)) {
+    struct thread* t = list_entry(e, struct thread, donation_thread);
+    next = list_next(e);
+    if(t->lock_waiting == l) {
+      list_remove(e);
+    }
+    e = next;
+  }
 }
