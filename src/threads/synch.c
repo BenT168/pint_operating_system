@@ -210,7 +210,7 @@ lock_acquire (struct lock *lock)
    donates priority to the lock acquired thread.
   */
 
-  if(lock->holder != NULL) {
+  if(thread_mlfqs == NULL && lock->holder != NULL) {
     thread_current()->lock_waiting = lock;
     list_insert_ordered(&lock->holder->threads_donated, &thread_current()->donation_thread,
     &is_lower_priority, NULL);
@@ -255,9 +255,10 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
-  remove_with_lock(lock);
-  update_priority();
-
+  if(thread_mlfqs == NULL) {
+    remove_with_lock(lock);
+    update_priority();
+  }
   sema_up (&lock->semaphore);
 }
 

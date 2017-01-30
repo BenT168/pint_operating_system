@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixedpointrealarith.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -385,40 +386,8 @@ thread_set_priority (int new_priority)
   if (priority_prev > thread_current()->priority) {
     check_max_priority();
   }
-  /*if (new_priority >= PRI_MIN && new_priority <= PRI_MAX) {
-    thread_current ()->priority = new_priority;
-    if (list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority) {
-      thread_yield();
-    }
-  }*/
+
   intr_set_level(level);
-/*
-  ASSERT (new_priority >= PRI_MIN);
-  ASSERT (new_priority <= PRI_MAX);
-
-  enum intr_level old_level;
-  old_level = intr_disable();
-
-  struct thread *cur = thread_current();
-  cur->priority = new_priority;
-
-  /* If the thread setting a new priority is a thread in ready_list then
-     change its position in the list accordingly (remove and re-insert).
-  if (cur->status == THREAD_READY) {
-    list_remove (&cur->elem);
-    list_insert_ordered(&ready_list, &cur->elem,
-                          is_lower_priority, NULL);
-  }
-
-  /* If the thread at the front of the list has now higher priority than the
-     currently running thread then let the former run first.
-  if (list_entry(list_begin(&ready_list), struct thread, elem)->priority
-        > cur->priority) {
-    thread_yield();
-  }
-
-  intr_set_level (old_level);
-  */
 }
 
 /* Returns the current thread's priority. */
@@ -436,6 +405,7 @@ thread_set_nice (int nice UNUSED)
   enum intr_level level = intr_disable();
 
   thread_current()->nice = nice;
+  //thread_mlfqs_priority
   check_max_priority();
 
   intr_set_level(level);
@@ -453,17 +423,15 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void)
 {
-//  return rounded_to_int(mult_mixed(load_avg, 100));
-return 0;
+  return convert_to_int_nearest(mul_x_y(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void)
 {
-  //int cpu = thread_current()->cpu_num;
-  return 0;
-//  return rounded_to_int(mult_mixed(cpu, 100));
+  int cpu = thread_current()->cpu_num;
+  return convert_to_int_nearest(mul_x_y(cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -765,3 +733,19 @@ void remove_with_lock(struct lock* l) {
     e = next;
   }
 }
+
+// Functions specific when set for advanced scheduling
+
+/*
+void priority_thread_m1fqs(struct thread* t) {
+
+}
+
+void cpu_thread_m1fqs(struct thread* t) {
+
+}
+
+void load_avg_thread_m1fqs(void) {
+
+}
+*/
