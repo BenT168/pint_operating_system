@@ -1,5 +1,3 @@
-
-
 # -*- makefile -*-
 
 SRCDIR = ../..
@@ -23,7 +21,6 @@ threads_SRC += threads/intr-stubs.S	# Interrupt stubs.
 threads_SRC += threads/synch.c		# Synchronization.
 threads_SRC += threads/palloc.c		# Page allocator.
 threads_SRC += threads/malloc.c		# Subpage allocator.
-threads_SRC += threads/fixedpointrealarith.c  # fixed point arithmetic BSD
 
 # Device driver code.
 devices_SRC  = devices/pit.c		# Programmable interrupt timer chip.

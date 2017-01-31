@@ -16,6 +16,7 @@ struct semaphore_elem
   {
     struct list_elem elem;              /* List element. */
     struct semaphore semaphore;         /* This semaphore. */
+    int sema_priority;                  /* Priority for this semaphore. */
   };
 
 void sema_init (struct semaphore *, unsigned value);

@@ -4,8 +4,6 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "threads/fixedpointrealarith.h"
-
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -25,6 +23,15 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Nice Range */
+#define NICE_DEFAULT 0                  /* Default niceness */
+#define NICE_MIN -20                    /* Minumum niceness */
+#define NICE_MAX 20                     /* Maximum niceness */
+
+#define CPU_NUM_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
+#define DEPTH_LIMIT 8
 
 /* A kernel thread or user process.
 
@@ -163,5 +170,14 @@ void update_priority(void);
 void donate_priority(void);
 void check_max_priority(void);
 void remove_with_lock(struct lock* l);
+
+// mlfqs functions
+
+void recalculate_mlfqs(void);
+void priority_thread_mlfqs(struct thread* t, void *aux UNUSED);
+void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED);
+void load_avg_thread_mlfqs (void);
+
+
 
 #endif /* threads/thread.h */

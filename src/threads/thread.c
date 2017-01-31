@@ -12,6 +12,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/fixedpointrealarith.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -20,17 +21,6 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
-
-#define NICE_DEFAULT 0
-#define NICE_MIN 20
-#define NICE_MAX 20
-
-#define CPU_NUM_DEFAULT 0
-
-#define LOAD_AVG_DEFAULT 0
-
-
-#define DEPTH_LIMIT 8
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running.
@@ -150,6 +140,11 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  if (thread_mlfqs) {
+    recalculate_mlfqs ();
+  }
+  thread_ticks++;
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -400,16 +395,24 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED)
+thread_set_nice (int nice)
 {
-  enum intr_level level = intr_disable();
+  ASSERT (thread_mlfqs);
+  ASSERT (nice >= NICE_MIN);
+  ASSERT (nice <= NICE_MAX);
 
-  thread_current()->nice = nice;
-  //thread_mlfqs_priority
-  check_max_priority();
+  thread_current ()->nice = nice;
 
-  intr_set_level(level);
+  priority_thread_mlfqs(thread_current (), NULL);
 
+  if (!list_empty(&ready_list))
+  {
+    struct thread * next = list_entry (list_max (&ready_list,
+                                       &is_lower_priority , NULL),
+                                       struct thread, elem);
+    if(thread_current ()->priority < next->priority)
+      thread_yield ();
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -423,7 +426,9 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void)
 {
-  return convert_to_int_nearest(mul_x_y(load_avg, 100));
+  int mul = mul_x_y(load_avg, 100);
+  int nearest_int = convert_to_int_nearest(mul);
+  return nearest_int;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -431,7 +436,9 @@ int
 thread_get_recent_cpu (void)
 {
   int cpu = thread_current()->cpu_num;
-  return convert_to_int_nearest(mul_x_y(cpu, 100));
+  int mul = mul_x_y(cpu, 100);
+  int nearest_int = convert_to_int_nearest(mul);
+  return nearest_int;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -522,15 +529,17 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  if (thread_mlfqs) {
+      priority_thread_mlfqs (t, NULL);
+  } else {
+      t->base_priority = priority;
+      t->lock_waiting = NULL;
+      list_init(&t->threads_donated);
+    }
+
   old_level = intr_disable ();
-  //list_insert_ordered (&all_list, &t->allelem, &is_lower_priority, NULL);
   list_push_back (&all_list, &t->allelem);
-
   intr_set_level (old_level);
-
-  t->base_priority = priority;
-  t->lock_waiting = NULL;
-  list_init(&t->threads_donated);
 
   t->nice = NICE_DEFAULT;
   t->cpu_num = CPU_NUM_DEFAULT;
@@ -736,16 +745,81 @@ void remove_with_lock(struct lock* l) {
 
 // Functions specific when set for advanced scheduling
 
-/*
-void priority_thread_m1fqs(struct thread* t) {
 
+void recalculate_mlfqs(void)
+{
+  ASSERT (thread_mlfqs);
+
+  struct thread *t = thread_current ();
+
+  if (timer_ticks () % TIMER_FREQ == 0)
+    {
+      load_avg_thread_mlfqs ();
+      thread_foreach (&cpu_thread_mlfqs, NULL);
+    }
+    if (thread_current () != idle_thread)
+    t->cpu_num = add_x_n(t->cpu_num, 1);
+
+  if (timer_ticks () % TIME_SLICE == 0)
+    thread_foreach (&priority_thread_mlfqs, NULL);
 }
 
-void cpu_thread_m1fqs(struct thread* t) {
 
+void priority_thread_mlfqs(struct thread* t, void *aux UNUSED)
+{
+
+  ASSERT (thread_mlfqs);
+
+  int32_t fp_priority = convert_to_fixed_point(PRI_MAX);
+  int32_t cpu_recent = div_x_n(t->cpu_num, 4);
+  fp_priority = sub_x_y(fp_priority, cpu_recent);
+  fp_priority = sub_x_y(fp_priority, convert_to_fixed_point(t->nice * 2));
+  int priority_num = convert_to_int_zero(fp_priority);
+  if (priority_num > PRI_MAX)
+    priority_num = PRI_MAX;
+
+  if (priority_num < PRI_MIN)
+    priority_num = PRI_MIN;
+
+  t->priority = priority_num;
 }
 
-void load_avg_thread_m1fqs(void) {
 
+void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED)
+{
+
+  ASSERT (thread_mlfqs);
+
+  int32_t coeff;
+
+  int32_t cpu_recent = t->cpu_num;
+  int32_t curr_load_avg = load_avg;
+
+  curr_load_avg = mul_x_n(curr_load_avg, 2);
+  coeff = div_x_y(curr_load_avg, add_x_n(curr_load_avg, 1));
+
+  cpu_recent = mul_x_y(coeff, cpu_recent);
+  cpu_recent = add_x_n(cpu_recent, t->nice);
+
+  t->cpu_num = cpu_recent;
 }
-*/
+
+
+void load_avg_thread_mlfqs (void)
+{
+
+  ASSERT (thread_mlfqs);
+
+  int32_t load_avg_coeff = convert_to_fixed_point(59);
+  load_avg_coeff = div_x_n(load_avg_coeff, 60);
+  int32_t ready_thread_coeff = convert_to_fixed_point (1);
+  ready_thread_coeff = div_x_n (ready_thread_coeff, 60);
+  int ready_threads = list_size (&ready_list);
+  if (thread_current () != idle_thread)
+    ready_threads++;
+
+  load_avg_coeff = mul_x_y(load_avg_coeff, load_avg);
+  ready_thread_coeff = mul_x_n(ready_thread_coeff, ready_threads);
+
+  load_avg = add_x_y(load_avg_coeff, ready_thread_coeff);
+}
