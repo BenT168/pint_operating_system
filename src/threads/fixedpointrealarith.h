@@ -1,11 +1,6 @@
 #include <stdint.h>
 
-#define F 1 << 14
-
-#define MAX_32BIT_INT ((1 << 31) - 1)
-
-#define MIN_32BIT_INT (-(1 << 31))
-
+#define F (1 << 14)
 
 int convert_to_fixed_point(int n);
 int convert_to_int_zero(int x);
@@ -37,8 +32,9 @@ int convert_to_int_zero(int x) {
 int convert_to_int_nearest(int x) {
   if(x >= 0) {
     return (x + (F / 2)) / F;
+  } else {
+    return (x - (F / 2)) / F;
   }
-  return (x - (F / 2)) / F;
 }
 
 // Add x and y: x + y

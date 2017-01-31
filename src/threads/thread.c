@@ -11,7 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "threads/fixedpointrealarith.h"
+  #include "threads/fixedpointrealarith.h"
 #include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -141,9 +141,9 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  if (thread_mlfqs) {
+  //if (thread_mlfqs) {
     recalculate_mlfqs ();
-  }
+  //}
   thread_ticks++;
 
   /* Enforce preemption. */
@@ -401,17 +401,18 @@ thread_set_nice (int nice)
   ASSERT (nice >= NICE_MIN);
   ASSERT (nice <= NICE_MAX);
 
-  thread_current ()->nice = nice;
+  thread_current()->nice = nice;
 
   priority_thread_mlfqs(thread_current (), NULL);
 
-  if (!list_empty(&ready_list))
-  {
-    struct thread * next = list_entry (list_max (&ready_list,
+  if (!list_empty(&ready_list)) {
+    struct thread *next = list_entry (list_max (&ready_list,
                                        &is_lower_priority , NULL),
                                        struct thread, elem);
-    if(thread_current ()->priority < next->priority)
+
+    if(thread_current ()->priority < next->priority) {
       thread_yield ();
+    }
   }
 }
 
@@ -426,7 +427,7 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void)
 {
-  int mul = mul_x_y(load_avg, 100);
+  int mul = mul_x_n(load_avg, 100);
   int nearest_int = convert_to_int_nearest(mul);
   return nearest_int;
 }
@@ -436,7 +437,7 @@ int
 thread_get_recent_cpu (void)
 {
   int cpu = thread_current()->cpu_num;
-  int mul = mul_x_y(cpu, 100);
+  int mul = mul_x_n(cpu, 100);
   int nearest_int = convert_to_int_nearest(mul);
   return nearest_int;
 }
@@ -674,7 +675,7 @@ bool is_lower_priority (const struct list_elem *a,
   struct thread *threadA = list_entry(a, struct thread, elem);
   struct thread *threadB = list_entry(b, struct thread, elem);
 
-  return threadA->priority > threadB->priority; //TODO: Change priority with effective_priority as soon as it is introduced
+  return threadA->priority > threadB->priority;
 }
 
 void check_max_priority(void) {
@@ -743,8 +744,8 @@ void remove_with_lock(struct lock* l) {
   }
 }
 
-// Functions specific when set for advanced scheduling
 
+// Functions specific when set for advanced scheduling
 
 void recalculate_mlfqs(void)
 {
@@ -752,16 +753,17 @@ void recalculate_mlfqs(void)
 
   struct thread *t = thread_current ();
 
-  if (timer_ticks () % TIMER_FREQ == 0)
-    {
-      load_avg_thread_mlfqs ();
-      thread_foreach (&cpu_thread_mlfqs, NULL);
-    }
-    if (thread_current () != idle_thread)
+  if (timer_ticks () % TIMER_FREQ == 0) {
+    load_avg_thread_mlfqs ();
+    thread_foreach (&cpu_thread_mlfqs, NULL);
+  }
+  if (thread_current () != idle_thread) {
     t->cpu_num = add_x_n(t->cpu_num, 1);
+  }
 
-  if (timer_ticks () % TIME_SLICE == 0)
+  if (timer_ticks () % TIME_SLICE == 0) {
     thread_foreach (&priority_thread_mlfqs, NULL);
+  }
 }
 
 
@@ -789,6 +791,7 @@ void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED)
 {
 
   ASSERT (thread_mlfqs);
+  ASSERT(timer_ticks () % TIME_SLICE == 0);
 
   int32_t coeff;
 
@@ -810,16 +813,29 @@ void load_avg_thread_mlfqs (void)
 
   ASSERT (thread_mlfqs);
 
-  int32_t load_avg_coeff = convert_to_fixed_point(59);
-  load_avg_coeff = div_x_n(load_avg_coeff, 60);
-  int32_t ready_thread_coeff = convert_to_fixed_point (1);
-  ready_thread_coeff = div_x_n (ready_thread_coeff, 60);
+  int fp_59 = convert_to_fixed_point(59);
+  int fp_60 = convert_to_fixed_point(60);
+
+  int load_avg_curr = load_avg;
+
+  // 59 / 60
+  int fp_59_div_60 = div_x_y(fp_59, fp_60);
+
+  // (59/60)*load_avg
+  int load_avg_mul = mul_x_y(load_avg_curr, fp_59_div_60);
+
+  //size of ready threads
   int ready_threads = list_size (&ready_list);
-  if (thread_current () != idle_thread)
+  if (thread_current() != idle_thread) {
     ready_threads++;
+  }
 
-  load_avg_coeff = mul_x_y(load_avg_coeff, load_avg);
-  ready_thread_coeff = mul_x_n(ready_thread_coeff, ready_threads);
+  // (1/60) * ready_threads
 
-  load_avg = add_x_y(load_avg_coeff, ready_thread_coeff);
+  int fp_READY_THREADS = convert_to_fixed_point(ready_threads);
+  int ready_threads_60 = div_x_y(fp_READY_THREADS, fp_60);
+
+  // (59/60)load_avg + (1/60)* ready_threads
+  load_avg = add_x_y(load_avg_mul, ready_threads_60);
+
 }
