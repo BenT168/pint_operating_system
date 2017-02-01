@@ -29,9 +29,9 @@ typedef int tid_t;
 #define NICE_MIN -20                    /* Minumum niceness */
 #define NICE_MAX 20                     /* Maximum niceness */
 
-#define CPU_NUM_DEFAULT 0
-#define LOAD_AVG_DEFAULT 0
-#define DEPTH_LIMIT 8
+#define CPU_NUM_DEFAULT 0               /* Default cpu_num */
+#define LOAD_AVG_DEFAULT 0              /* Default load_avg */
+#define DEPTH_LIMIT 8                   /* Limit for nested donation */
 
 /* A kernel thread or user process.
 
@@ -119,9 +119,9 @@ struct thread
     struct lock* lock_waiting;        /* lock that thread is waiting for */
     struct list threads_donated;      /* list of threads */
 
-    // Advanced scheduling
-    int cpu_num;
-    int nice;
+    /* Advanced scheduling */
+    int cpu_num;                        /* Time spent in the CPU recently */
+    int nice;                           /* Index of greediness for CPU /*
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -171,8 +171,7 @@ void donate_priority(void);
 void check_max_priority(void);
 void remove_with_lock(struct lock* l);
 
-// mlfqs functions
-
+/* mlfqs functions */
 void recalculate_mlfqs(void);
 void priority_thread_mlfqs(struct thread* t, void *aux UNUSED);
 void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED);

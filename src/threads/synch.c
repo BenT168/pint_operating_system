@@ -122,7 +122,8 @@ sema_up (struct semaphore *sema)
   }
 
   sema->value++;
-  //TASK 1
+  /* TASK 1: Tests the maximum priority: if the new thread has higher priority
+           than the currently running thread then let the former run first. */
   if(!intr_context()) {
     check_max_priority();
   }
@@ -212,11 +213,12 @@ lock_acquire (struct lock *lock)
    donates priority to the lock acquired thread.
   */
 
-  //TASK 1
+  /* TASK 1: If in priority donation mode, set thread as waiting for the lock
+             and insert current's donation_thread into list threads_donated */
   if(!thread_mlfqs && lock->holder != NULL) {
     thread_current()->lock_waiting = lock;
-    list_insert_ordered(&lock->holder->threads_donated, &thread_current()->donation_thread,
-    &is_lower_priority, NULL);
+    list_insert_ordered(&lock->holder->threads_donated,
+                &thread_current()->donation_thread, &is_lower_priority, NULL);
   }
 
   sema_down (&lock->semaphore);
@@ -278,7 +280,8 @@ lock_held_by_current_thread (const struct lock *lock)
 }
 
 
-//TASK 1
+/* TASK 1: Function used as criterium to sort list of semaphores
+           priority-wise */
 static bool is_lower_sema_priority(const struct list_elem *a,
               const struct list_elem *b, void *aux UNUSED)
 {
@@ -332,7 +335,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   sema_init (&waiter.semaphore, 0);
-  //TASK 1
+  /* TASK 1 */
   waiter.sema_priority = thread_current ()->priority;
   list_push_back (&cond->waiters, &waiter.elem);
   lock_release (lock);
