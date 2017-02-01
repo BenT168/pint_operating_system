@@ -115,6 +115,7 @@ thread_start (void)
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
+  //TASK 1
   load_avg = LOAD_AVG_DEFAULT;
 
   /* Start preemptive thread scheduling. */
@@ -141,6 +142,7 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  //TASK 1
   if (thread_mlfqs) {
     recalculate_mlfqs ();
   }
@@ -218,6 +220,7 @@ thread_create (const char *name, int priority,
 
   intr_set_level (old_level);
 
+  // TASK 1
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -363,13 +366,12 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-/* Sets the current thread's priority to NEW_PRIORITY.
+/* TASK 1: Sets the current thread's priority to NEW_PRIORITY.
    This function assumes ready_list is a priority-wise sorted list. */
 void
 thread_set_priority (int new_priority)
 {
   if(thread_mlfqs) return;
-  //printf("old: %d, new: %d", thread_current()->priority, new_priority);
   enum intr_level level = intr_disable();
   int priority_prev = thread_current()->priority;
   thread_current()->base_priority = new_priority;
@@ -385,7 +387,7 @@ thread_set_priority (int new_priority)
   intr_set_level(level);
 }
 
-/* Returns the current thread's priority. */
+/* TASK 1: Returns the current thread's priority. */
 int
 thread_get_priority (void)
 {
@@ -393,7 +395,7 @@ thread_get_priority (void)
 
 }
 
-/* Sets the current thread's nice value to NICE. */
+/* TASK 1:  Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice)
 {
@@ -416,14 +418,14 @@ thread_set_nice (int nice)
   }
 }
 
-/* Returns the current thread's nice value. */
+/* TASK 1 : Returns the current thread's nice value. */
 int
 thread_get_nice (void)
 {
   return thread_current()->nice;
 }
 
-/* Returns 100 times the system load average. */
+/* TASK 1: Returns 100 times the system load average. */
 int
 thread_get_load_avg (void)
 {
@@ -432,7 +434,7 @@ thread_get_load_avg (void)
   return nearest_int;
 }
 
-/* Returns 100 times the current thread's recent_cpu value. */
+/* TASK 1: Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void)
 {
@@ -530,6 +532,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  // TASK 1
   if (thread_mlfqs) {
       priority_thread_mlfqs (t, NULL);
   } else {
@@ -666,7 +669,9 @@ struct thread *thread_for_sema_list_elem (const struct list_elem *lelem) {
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* Function used as criterium to sort ready_list */
+
+
+/* TASK 0: Function used as criterium to sort ready_list */
 bool is_lower_priority (const struct list_elem *a,
                           const struct list_elem *b, void *aux UNUSED) {
   ASSERT(a != NULL);
@@ -678,6 +683,8 @@ bool is_lower_priority (const struct list_elem *a,
   return threadA->priority > threadB->priority;
 }
 
+
+//TASK 1
 void check_max_priority(void) {
 
   if(list_empty(&ready_list)) {
@@ -700,6 +707,8 @@ void check_max_priority(void) {
     }
 }
 
+
+//TASK 1
 void donate_priority(void) {
   int depth = 0;
   struct thread *t = thread_current();
@@ -716,6 +725,8 @@ void donate_priority(void) {
   }
 }
 
+
+//TASK 1
 void update_priority(void) {
   struct thread *t = thread_current();
   t->priority = t->base_priority;
@@ -731,6 +742,7 @@ void update_priority(void) {
   }
 
 
+//TASK 1
 void remove_with_lock(struct lock* l) {
   struct list_elem* e = list_begin(&thread_current()->threads_donated);
   struct list_elem* next;
@@ -745,8 +757,7 @@ void remove_with_lock(struct lock* l) {
 }
 
 
-// Functions specific when set for advanced scheduling
-
+//TASK 1: Functions specific when set for advanced scheduling
 void recalculate_mlfqs(void)
 {
   ASSERT (thread_mlfqs);
@@ -766,7 +777,7 @@ void recalculate_mlfqs(void)
   }
 }
 
-
+//TASK 1
 void priority_thread_mlfqs(struct thread* t, void *aux UNUSED)
 {
 
@@ -787,27 +798,32 @@ void priority_thread_mlfqs(struct thread* t, void *aux UNUSED)
 }
 
 
+//TASK 1: Function to calculate the recent cpu
 void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED)
 {
-
   ASSERT (thread_mlfqs);
+  //For cpu to be calculated, we need the folowing condition:
   ASSERT(timer_ticks () % TIME_SLICE == 0);
 
-  int32_t coeff;
+  int cpu_recent = t->cpu_num;
+  int load_avg_curr = load_avg;
 
-  int32_t cpu_recent = t->cpu_num;
-  int32_t curr_load_avg = load_avg;
-
+  // (2*load_avg)
   curr_load_avg = mul_x_n(curr_load_avg, 2);
-  coeff = div_x_y(curr_load_avg, add_x_n(curr_load_avg, 1));
 
+  // (2*load_avg)/(2*load_avg + 1)
+  int coeff = div_x_y(curr_load_avg, add_x_n(curr_load_avg, 1));
+
+  // (2*load_avg)/(2*load_avg + 1) * recent_cpu
   cpu_recent = mul_x_y(coeff, cpu_recent);
+
+  // (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice,
   cpu_recent = add_x_n(cpu_recent, t->nice);
 
   t->cpu_num = cpu_recent;
 }
 
-
+//TASK 1: Function to calculate the load average
 void load_avg_thread_mlfqs (void)
 {
 
