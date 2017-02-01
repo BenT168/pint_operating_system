@@ -141,9 +141,9 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  //if (thread_mlfqs) {
+  if (thread_mlfqs) {
     recalculate_mlfqs ();
-  //}
+  }
   thread_ticks++;
 
   /* Enforce preemption. */
