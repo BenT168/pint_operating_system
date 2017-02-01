@@ -121,7 +121,7 @@ struct thread
 
     /* Advanced scheduling */
     int cpu_num;                        /* Time spent in the CPU recently */
-    int nice;                           /* Index of greediness for CPU /*
+    int nice;                           /* Index of greediness for CPU */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
