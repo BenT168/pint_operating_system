@@ -813,10 +813,10 @@ void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED)
   int load_avg_curr = load_avg;
 
   /*  (2*load_avg)  */
-  load_avg_curr = mul_x_n(curr_load_avg, 2);
+  load_avg_curr = mul_x_n(load_avg_curr, 2);
 
   /*  (2*load_avg)/(2*load_avg + 1)  */
-  int coeff = div_x_y(curr_load_avg, add_x_n(curr_load_avg, 1));
+  int coeff = div_x_y(load_avg_curr, add_x_n(load_avg_curr, 1));
 
   /*  (2*load_avg)/(2*load_avg + 1) * recent_cpu  */
   cpu_recent = mul_x_y(coeff, cpu_recent);
