@@ -3,6 +3,7 @@
 
 #include <round.h>
 #include <stdint.h>
+#include <list.h>
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
@@ -25,5 +26,19 @@ void timer_udelay (int64_t microseconds);
 void timer_ndelay (int64_t nanoseconds);
 
 void timer_print_stats (void);
+
+/* 't1' and 't2' are pointers to the threads in which the list elements, 'elem1'
+   and 'elem2' are embedded.
+   The following function implements a binary relation 'R' on the set of all
+   threads 'T' defined as follows:
+     forall t1,t2 belonging to T, R(t1, t2) iff
+       ( t1->wakeup_time <= t2->wakeup_time ) OR
+       ( t1->wakeup_time == t2->wakeup_time AND t1->priority >= t2->priority )
+   We return true iff (t1,t2) belongs to R and false otherwise.
+   The auxiliary element 'aux' is unused and needed only to satisfy the
+   interface of the list 'less' function. */
+bool comparator_wakeup_time (const struct list_elem *elem1,
+                             const struct list_elem *elem2,
+                             void *aux);
 
 #endif /* devices/timer.h */

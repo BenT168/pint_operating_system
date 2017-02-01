@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -90,6 +91,21 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    /* Shared between thread.c and timer.c */
+
+    /* Wake-up time. */
+    int64_t wakeup_time;
+    /* List element for sleeping-threads list */
+    struct list_elem sleep_elem;
+
+    /* In order to guarantee that the sleeping thread is unblocked at the
+       specified time, the only thread waiting on this semaphore, must be
+       'this' thread. If more than one thread were waiting on this semaphore,
+       it is not guaranteed that 'this' thread will be the one that is
+       unblocked. Since we will only have one thread waiting on this semaphore,
+       it makes sense to simply embed it in the thread struct. */
+    struct semaphore sleep_sema;
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -137,5 +153,9 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+bool comparator_prio (const struct list_elem *elem1,
+                      const struct list_elem *elem_2, void *aux);
+void test_max_prio_thread (void);
 
 #endif /* threads/thread.h */
