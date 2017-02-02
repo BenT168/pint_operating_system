@@ -41,9 +41,15 @@ FirstName LastName <email@domain.example>
 >> How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
 
+When a thread goes to sleep on some semaphore, \texttt{sema}, it is added to the list \texttt{&sema->waiters}. One of the invariants maintained on this list is that its elements - the threads waiting on the semaphore - are always sorted in descending order of priority. This invariant is maintained by always adding elements to the list using the \texttt{list_insert_ordered} function, and passing the comparator, \texttt{comparator_prio} as the necessary, element comparison function.
+
+In the \texttt{sema_up} function, we unblock the thread at the head of the list - which will be the highest priority thread.
+
 >> A4: (5 marks)
 >> Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
+
+The \texttt{lock_acquire} function first checks whether the basic, priority donation policy is enabled and whether the lock in question has already been acquired by another thread. If both these conditions hold, then the \texttt{lock_waiting} field of the current thread is assigned the value \texttt{lock} - where \texttt{lock} is simply a pointer to the lock in question. The current thread - through it's \texttt{donation_thread} field - is then inserted into the \texttt{threads_donated} list of the thread currently holding the lock. This is insertion is actually an ordered insertion, using the comparator \texttt{is_lower_priority} to maintain the invariant that list of waiting threads is sorted in ascending order of priority. Both \texttt{donation_thread} and \texttt{threads_donated} are stored in \texttt{struct thread}.
 
 >> A5: (5 marks)
 >> Describe the sequence of events when lock_release() is called
@@ -53,7 +59,7 @@ FirstName LastName <email@domain.example>
 
 >> A6: (5 marks)
 >> Describe a potential race in thread_set_priority() and explain
->> how your implementation avoids it.  Can you use a lock to avoid
+>> how your implementation avoids it. Can you use a lock to avoid
 >> this race?
 
 ---- RATIONALE ----
