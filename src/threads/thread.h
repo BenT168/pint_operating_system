@@ -91,6 +91,23 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    /* Lock on which thread is waiting. Once the lock in question is released,
+       'lock_waiting' should be set to null.
+
+       We denote the running thread as 'T'.
+
+       The list of waiters on a semaphore will be maintained in descending order of priority.
+
+       Since in this case, 'T1' has a higher priority than 'T', we know the running must have inherited
+       'T1''s higher priority - otherwise it would not have been
+       allowed to run in the first place.
+       */
+    //struct lock *lock_waiting;
+    /* Threads that have donated their priorities to this thread. The threads
+       should be listed in the order that they have donated their priorities,
+       with the most recent donating thread at the head of the list. */
+    //struct list donating_threads;
+
     /* Shared between thread.c and timer.c */
 
     /* Wake-up time. */
@@ -154,8 +171,11 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-bool comparator_prio (const struct list_elem *elem1,
-                      const struct list_elem *elem_2, void *aux);
+void thread_yield_current (struct thread *cur);
+void priority_ordered_insert (struct list *l, struct thread *t);
+bool comparator_prio_more (const struct list_elem *elem1,
+                           const struct list_elem *elem_2, void *aux);
 void test_max_prio_thread (void);
+void donate_priority (struct thread *t);
 
 #endif /* threads/thread.h */

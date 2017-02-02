@@ -71,6 +71,8 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static void t_thread_set_priority (struct thread *t, int new_priority);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -209,6 +211,23 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* When a new thread is created, it is added to the ready queue (also called
+     the "run queue") by calling 'thread_unblock'. If some newly created
+     thread, 'T1', has a higher priority than the running thread, 'T', then
+     'T' should immediately yield the processor to 'T1'. However, the
+     specification for 'thread_unblock' states that
+
+       "This function does not preempt a running thread".
+
+     Therefore, if 'T1' does indeed have a (strictly) higher priority than 'T',
+     we do not preempt 'T' in 'thread_unblock' and instead make a call to
+     'test_max_prio_thread'.
+
+     'test_max_prio_thread' will determine whether the highest priority thread,
+     which must be 'T1', does indeed have a higher priority than the running
+     thread 'T'. If so, the 'T' will yield the processor to 'T1'. However, note
+     that this will only work if we insert threads into the ready list in
+     descending order of priority. */
   test_max_prio_thread ();
 
   return tid;
@@ -247,7 +266,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, comparator_prio, NULL);
+  list_insert_ordered (&ready_list, &t->elem, comparator_prio_more, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -318,7 +337,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_insert_ordered (&ready_list, &cur->elem, comparator_prio, NULL);
+    list_insert_ordered (&ready_list, &cur->elem, comparator_prio_more, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -339,7 +358,7 @@ thread_yield_current (struct thread *cur)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_insert_ordered (&ready_list, &cur->elem, comparator_prio, NULL);
+    priority_ordered_insert (&ready_list, cur);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -372,10 +391,10 @@ thread_set_priority (int new_priority)
      will lead to undefined behaviour. */
   struct thread *cur = thread_current ();
 
-  enum intr_level old_level = intr_disable ();
-
   ASSERT (new_priority >= PRI_MIN && new_priority <= PRI_MAX);
   ASSERT (is_thread (cur));
+
+  enum intr_level old_level = intr_disable ();
 
   cur->priority = new_priority;
 
@@ -391,10 +410,19 @@ thread_set_priority (int new_priority)
 
   if (cur->status == THREAD_READY)
   {
+    /* A thread should have the status 'THREAD_READY' if and only if it is on
+       the ready list. So if it is on the ready list, we remove it and reinsert
+       it according to its new priority. */
     list_remove (&cur->elem);
-    list_insert_ordered (&ready_list, &cur->elem, comparator_prio, NULL);
-  } else if (cur->status == THREAD_RUNNING && cur->priority < t->priority)
+    priority_ordered_insert (&ready_list, cur);
+    // Check whether the new priority is higher than that of the running thread.
+    test_max_prio_thread ();
+  } else if (cur->status == THREAD_RUNNING &&
+             !list_empty (&ready_list) && cur->priority < t->priority)
   {
+    /* If the running thread's priority is now lower than that of the highest
+       priority thread on the ready queue, the running thread should yield the
+       CPU. */
     thread_yield_current (cur);
   }
   intr_set_level (old_level);
@@ -654,26 +682,32 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
      forall t1,t2 belonging to T, R(t1, t2) iff
        ( t1->priority <= t2->priority)
    We return true iff (t1,t2) belongs to R and false otherwise. */
-bool comparator_prio (const struct list_elem *elem1,
+bool
+comparator_prio_more (const struct list_elem *elem1,
                       const struct list_elem *elem2, void *aux UNUSED)
 {
   const struct thread *t1 = list_entry (elem1, struct thread, elem);
   const struct thread *t2 = list_entry (elem2, struct thread, elem);
-  /* Using the less-than-or-equal (<=) operator, rather than the strict
-     less-than (<) operator will lead to performance benefits. A quick
-     examination of the function for ordered list insertion -
-     'list_insert_ordered' - reveals that ordered list insertion is an O(n)
-     operation. 'list_insert_ordered' takes a comparator as an argument and
-     breaks from an internal 'for' loop when the comparator returns true.
-     Therefore, using the '<=' operator instead of the '<' operator, allows us
-     to avoid unnecessary comparison of equal elements in a list. With regard
-     to PintOS, this appears to be a significant optimisation since several
-     threads are often initialized with the same default priority. */
+  /* When inserting threads with equal priorities into a list, it is crucial
+     that the threads inserted most recently, be farther from the head of the
+     list than the threads inserted farther back in time. */
   return t1->priority > t2->priority;
 }
 
+/* Inserts a thread into 'l' in descending order of priority. That is, the first
+   thread in 'l' will be the thread with the highest priority. */
+void
+priority_ordered_insert (struct list *l, struct thread *t)
+{
+  list_insert_ordered (l, &t->elem, comparator_prio_more, NULL);
+}
 
-void test_max_prio_thread (void)
+/* Checks whether the running thread has a lower priority than the highest,
+   priority thread on the ready queue. Since the ready queue is always sorted
+   in descending order of priority, the highest priority thread will be the
+   thread at the front of the ready queue. */
+void
+test_max_prio_thread (void)
 {
   if (list_empty (&ready_list))
   {
@@ -690,5 +724,50 @@ void test_max_prio_thread (void)
     {
       intr_yield_on_return ();
     }
+  }
+}
+
+/* Running thread donates it's priority to thread 't'. Thread 't' will only
+   accept this new priority if it is higher than 't''s own priority. */
+void
+donate_priority (struct thread *t)
+{
+  enum intr_level old_level = intr_disable ();
+  struct thread *cur = thread_current ();
+  /*// 'l' is a pointer to the lock on which the running thread is waiting.
+  struct lock *l = cur->lock_waiting;
+  if (l != NULL)
+  {
+    if (l->holder != NULL && cur->priority > l->holder->priority)
+    {
+      t_thread_set_priority (t, cur->priority);
+    }
+  }*/
+  if (cur->priority > t->priority)
+  {
+    t_thread_set_priority (t, cur->priority);
+  }
+  intr_set_level (old_level);
+}
+
+/* This function should only be used as a helper function for 'donate_priority'.
+   We assert that 'new_priority' is higher than 't''s current priority. */
+static void
+t_thread_set_priority (struct thread *t, int new_priority)
+{
+  ASSERT (new_priority >= PRI_MIN && new_priority <= PRI_MAX);
+  ASSERT (new_priority > t->priority);
+
+  // The running thread should never use this function to attempt to set its own
+  // priority. If it does, it is a failure of our program logic.
+  ASSERT (t->tid != thread_current ()->tid);
+
+  t->priority = new_priority;
+
+  if (t->status == THREAD_READY)
+  {
+    list_remove (&t->elem);
+    priority_ordered_insert (&ready_list, t);
+    test_max_prio_thread ();
   }
 }
