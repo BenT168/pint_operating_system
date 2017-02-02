@@ -38,50 +38,238 @@
 
 \textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
 \\ \\
-TOAMEND
-A \texttt{"sleep\_sema"} in \texttt{devices/timer.c} is semaphores used to block the sleeping threads. Ordered by increasing number of \texttt{wake\_up} tick semaphores and initialised in \texttt{timer\_init()}.
-
+In thread.h,
 \begin{lstlisting}
-    /* TASK O: Semaphores used to block the sleeping threads */
-    static struct list sleep_sema;
-\end{lstlisting}
-\hfill \break
-Added to struct thread:
+    struct thread
+      {
+        /* Owned by thread.c. */
+        ...
+        int eff_priority;                   /* TASK 1: Effective priority */
+        ...
 
-\begin{lstlisting}
-    int64_t wake_up_tick;  /* Keep track the tick when sleeping thread wakes up */
+
+        /* TASK 1 : Priority Checking */
+        int base_priority;                /* initial priority of thread */
+        struct list_elem donation_thread; /* thread element that is donated */
+        struct lock* lock_waiting;        /* lock that thread is waiting for */
+        struct list threads_donated;      /* list of threads */
+
+        ...
+      };
+
 \end{lstlisting}
+\\
+Purpose of each new addition:
+
+\texttt{eff\_priority}: The effective priority of the thread, ???
+
+\texttt{base\_priority}: The base priority of the thread, without taking priority donations into account.
+
+\texttt{donation\_threads}: \texttt{list\_elem} for the donor threads list.
+
+\texttt{lock\_waiting}: Lock that this thread is waiting on.
+
+\texttt{thread\_donated}:  List of threads that have donated their priority to this thread, ordered by priority.
+
 
 
 \subsection*{A2: (10 marks) }
 
 \textit{Explain the data structure used to track priority donation. Give a diagram that illustrates a nested donation in your structure.}
 \\ \\
-TOWRITE
+Priority donation is tracked using \texttt{struct list thread\_donated}, which is part of each
+\texttt{struct thread}. \texttt{thread\_donated} is ordered in increasing order of priority of the elements.
+
+\begin{figure}[htb]
+\includegraphics[width=7cm, height=7cm]{a2-???JPG}
+\centering
+\end{figure}
+
+
 
 \subsection{ALGORITHMS}
 
 \subsubsection*{A3: (5 marks) }
 \textit{How do you ensure that the highest priority thread waiting for a lock, semaphore, or condition variable wakes up first?}
 \\ \\
-TOWRITE
+For locks and semaphores, this is handled at the semaphore level, by ordering the waiters list by the priority of the threads. For condition variables, since each semaphore in the list of waiters has exactly one thread, it is ordered in increasing order of priority of the thread in each semaphore.
+A thread is woken up by popping the first element off the semaphore's waiters list, and unblocking it, and for condition variables, the semaphore to call \texttt{sema\_up} on is also the first element in its waiters list.
+\\\\
+In sych.c,
+\begin{lstlisting}
+    void sema_up (struct semaphore *sema)
+    {
+      ...
+      /* TASK 1: Tests the maximum priority: if the new thread has higher priority than the currently running thread then let the former run first. */
+      if(!intr_context()) {
+        check_max_priority();
+      }
+      intr_set_level (old_level);
+    }
+\end{lstlisting}
+\\\\
+In thread.c, 
+\begin{lstlisting}
+    void check_max_priority(void)
+    {
+        if(list_empty(&ready_list)) {
+            return;
+        }
+
+        struct thread* t = list_entry(list_front(&ready_list), struct thread, elem);
+
+        if(intr_context()) {
+            thread_ticks++;
+            if(thread_current ()->priority < t->priority || (thread_ticks >= TIME_SLICE
+                            && thread_current()-> priority == t->priority)) {
+               ntr_yield_on_return();
+            }
+            return;
+        }
+
+        if(thread_current()->priority < t->priority) {
+         thread_yield();
+        }
+    }
+
+\end{lstlisting}
+
 
 \subsubsection*{A4: (5 marks) }
-\textit{Describe the sequence of events when a call to \texttt{lock\_acquire()} causes a priority donation.  How is nested donation handled?}
+\textit{Describe the sequence of events when a call to \texttt{lock\_acquire()} causes a priority donation. How is nested donation handled?}
 \\ \\
-TOWRITE
+If the lock has a holder, the current thread's \texttt{lock\_waiting} is updated with that lock.
+Its priority is then donated to the lock holder. If in priority donation mode, set thread as waiting for the lock and insert current's \texttt{donation\_thread} into list \texttt{threads\_donated}. This function also adds the donor thread to
+the \texttt{donor\_threads} of the donate thread.
+\\ \\
+After calling \texttt{sema\_down}, the current thread's \texttt{wait\_lock} is reset to \texttt{NULL}.
+
+\begin{lstlisting}
+    void lock_acquire (struct lock *lock)
+    {
+      ...
+
+      if(!thread_mlfqs && lock->holder != NULL) {
+        thread_current()->lock_waiting = lock;
+        list_insert_ordered(&lock->holder->threads_donated,
+                    &thread_current()->donation_thread, &is_lower_priority, NULL);
+      }
+
+      sema_down (&lock->semaphore);
+      thread_current()->lock_waiting = NULL;
+      lock->holder = thread_current();
+    }
+\end{lstlisting}
+\\ \\
+To handle the nestled donation, \texttt{donate\_priority()} declare a new struct thread and lock for  its execution. This function checks to see if the current thread has a donee by
+using the \texttt{lock\_waiting} field. If it does have one, that threads \texttt{threads\_donated}
+is reordered using \texttt{update\_priority()}. This function updates priority member in thread struct with the effective priority (i.e. taking into account donations).
+
+\begin{lstlisting}
+    void donate_priority(void) {
+      int depth = 0;
+      struct thread *t = thread_current();
+      struct lock *l = t->lock_waiting;
+      while(l != NULL && depth < DEPTH_LIMIT) {
+        depth++;
+
+        if(l->holder == NULL) return;
+        if(l->holder->priority >= t->priority) return;
+
+        l->holder->priority = t->priority;
+        t = l->holder;
+        l = t->lock_waiting;
+      }
+    }
+
+    void update_priority(void) {
+      struct thread *t = thread_current();
+      t->priority = t->base_priority;
+      if(list_empty(&t->threads_donated)) {
+        return;
+      }
+      struct thread *t2 = list_entry(list_front(&t->threads_donated),
+                                   struct thread, donation_thread);
+
+      if(t2->priority > t->priority) {
+         t->priority = t2->priority;
+       }
+      }
+\end{lstlisting}
+
 
 \subsubsection*{A5: (5 marks) }
 \textit{Describe the sequence of events when \texttt{lock\_release()} is called on a lock that a higher-priority thread is waiting for.}
 \\ \\
-TOWRITE
+If \texttt{thread\_mlfqs} returns false, call \texttt{remove\_from\_lock(lock)} on all elements of lock to remove the item from \texttt{threads\_donated} threads waiting for lock l.
+\\ \\
+Note that since the semaphores waiters list is ordered (as mentioned in A3) we know that the new owner of the lock will be the first element of this list. As such we donate the priority of all other waiters in the list to its first element.
+\\ \\
+After this \texttt{sema\_up} is called which unblocks the first element of the waiters list.
+\\ \\
+In thread.c,
+\begin{lstlisting}
+    /* TASK 1: Removes from list threads_donated threads waiting for lock l */
+    void remove_with_lock(struct lock* l) {
+      struct list_elem* e = list_begin(&thread_current()->threads_donated);
+      struct list_elem* next;
+      while(e != list_end(&thread_current()->threads_donated)) {
+        struct thread* t = list_entry(e, struct thread, donation_thread);
+        next = list_next(e);
+        if(t->lock_waiting == l) {
+          list_remove(e);
+        }
+        e = next;
+      }
+    }
+\end{lstlisting}
+\\\\
+In sych.c,
+\begin{lstlisting}
+    void lock_release (struct lock *lock)
+    {
+      ...
+      //TASK 1
+      if(!thread_mlfqs) {
+        remove_with_lock(lock);
+        update_priority();
+      }
+      sema_up (&lock->semaphore);
+    }
+
+\end{lstlisting}
+
+
 
 \subsection{SYNCHRONIZATION}
 
 \subsubsection*{A6: (5 marks) }
 \textit{Describe a potential race in \texttt{thread\_set\_priority()} and explain how your implementation avoids it.  Can you use a lock to avoid this race?}
 \\ \\
-TOWRITE
+The race can be avoided by setting the current thread's priority to \texttt{NEW\_PRIORITY}. This function assumes \texttt{ready\_list} is priority-wise sorted list. We modified the ready list and use a lock on the ready list so that there can be now data races.
+\\ \\
+In thread.c,
+\begin{lstlisting}
+    void thread_set_priority (int new_priority)
+    {
+      /* Advanced scheduler mode makes no use of this function */
+      if(thread_mlfqs) return;
+
+      enum intr_level level = intr_disable();
+      int priority_prev = thread_current()->priority;
+      thread_current()->base_priority = new_priority;
+      update_priority();
+
+      if(priority_prev < thread_current()->priority) {
+        donate_priority();
+      }
+      if (priority_prev > thread_current()->priority) {
+        check_max_priority();
+      }
+
+      intr_set_level(level);
+    }
+\end{lstlisting}
 
 
 \subsection{RATIONALE}
@@ -99,8 +287,41 @@ TOWRITE
 \subsection*{B1: (5 marks) }
 
 \textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
-\\ \\
-TOWRITE
+\\
+
+In thread.h,
+\begin{lstlisting}
+    struct thread
+      {
+
+        /* Nice Range */
+        #define NICE_DEFAULT 0                  /* Default niceness */
+        #define NICE_MIN -20                    /* Minumum niceness */
+        #define NICE_MAX 20                     /* Maximum niceness */
+
+        #define CPU_NUM_DEFAULT 0
+        #define LOAD_AVG_DEFAULT 0
+        #define DEPTH_LIMIT 8
+
+        ...
+
+        /* TASK 1: Advanced scheduling */
+        int cpu_num;
+        int nice;
+        ...
+        };
+
+        ...
+
+        * TASK 1: Advanced scheduling */
+
+        /* mlfqs functions */
+        void recalculate_mlfqs(void);
+        void priority_thread_mlfqs(struct thread* t, void *aux UNUSED);
+        void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED);
+        void load_avg_thread_mlfqs (void);
+
+\end{lstlisting}
 
 
 \subsection{ALGORITHMS}
