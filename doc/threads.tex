@@ -38,16 +38,10 @@
 
 \textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
 \\ \\
-In thread.h,
+In thread.h, we added:
 \begin{lstlisting}
     struct thread
       {
-        /* Owned by thread.c. */
-        ...
-        int eff_priority;                   /* TASK 1: Effective priority */
-        ...
-
-
         /* TASK 1 : Priority Checking */
         int base_priority;                /* initial priority of thread */
         struct list_elem donation_thread; /* thread element that is donated */
@@ -61,16 +55,15 @@ In thread.h,
 \\
 Purpose of each new addition:
 
-\texttt{eff\_priority}: The effective priority of the thread, ???
-
 \texttt{base\_priority}: The base priority of the thread, without taking priority donations into account.
 
-\texttt{donation\_threads}: \texttt{list\_elem} for the donor threads list.
+\texttt{donation\_threads}: \texttt{list\_elem} for the donor threads list. The donation thread can be added to another threads's donations
 
 \texttt{lock\_waiting}: Lock that this thread is waiting on.
 
-\texttt{thread\_donated}:  List of threads that have donated their priority to this thread, ordered by priority.
-
+\texttt{thread\_donated}:  If the \texttt{lock\_waiting} is not NULL, then the current thread is
+     waiting for a particular lock. \texttt{thread\_donated} is the list of
+     (different) threads which are also waiting for \texttt{lock\_waiting}. This list is ordered by the priority of the threads.
 
 
 \subsection*{A2: (10 marks) }
@@ -79,12 +72,30 @@ Purpose of each new addition:
 \\ \\
 Priority donation is tracked using \texttt{struct list thread\_donated}, which is part of each
 \texttt{struct thread}. \texttt{thread\_donated} is ordered in increasing order of priority of the elements.
-
-\begin{figure}[htb]
-\includegraphics[width=7cm, height=7cm]{a2-???JPG}
-\centering
-\end{figure}
-
+\\ \\
+Suppose we have three locks L1, L2 and L3. Also, suppose we have four threads T1, T2, T3 and T4.
+We have a list of threads:
+\\ \\
+List of T's : T1 - T2 - T3 - T4
+\\ \\
+And T1 has lock\_waiting =  L1
+\\ \\
+T2 has lock\_waiting  = L2
+\\ \\
+T3 has lock\_waiting =  L3
+\\ \\
+And finally, T4 is not waiting on any lock, so the lock\_waiting is set to NULL.
+\\ \\
+Map of threads and locks :
+( T1, L1 )  - ( T2, L2 ) - ( T3, L3 ) - ( T4, NULL )
+\\ \\
+We have that
+\\ \\
+T3's threads\_donated = T1 , T2.
+And its donated priority is the maximum of T3 ,T1 and T2.
+\\ \\
+T4's threads\_donated = T3.
+And its donated priority is the maximum of T3 and T2.
 
 
 \subsection{ALGORITHMS}
@@ -108,7 +119,7 @@ In sych.c,
     }
 \end{lstlisting}
 \\\\
-In thread.c, 
+In thread.c,
 \begin{lstlisting}
     void check_max_priority(void)
     {
@@ -122,7 +133,7 @@ In thread.c,
             thread_ticks++;
             if(thread_current ()->priority < t->priority || (thread_ticks >= TIME_SLICE
                             && thread_current()-> priority == t->priority)) {
-               ntr_yield_on_return();
+               intr_yield_on_return();
             }
             return;
         }
@@ -207,7 +218,7 @@ Note that since the semaphores waiters list is ordered (as mentioned in A3) we k
 \\ \\
 After this \texttt{sema\_up} is called which unblocks the first element of the waiters list.
 \\ \\
-In thread.c,
+In thread.c, we added:
 \begin{lstlisting}
     /* TASK 1: Removes from list threads_donated threads waiting for lock l */
     void remove_with_lock(struct lock* l) {
@@ -223,8 +234,8 @@ In thread.c,
       }
     }
 \end{lstlisting}
-\\\\
-In sych.c,
+\\ \\
+In synch.c, we added:
 \begin{lstlisting}
     void lock_release (struct lock *lock)
     {
@@ -246,9 +257,9 @@ In sych.c,
 \subsubsection*{A6: (5 marks) }
 \textit{Describe a potential race in \texttt{thread\_set\_priority()} and explain how your implementation avoids it.  Can you use a lock to avoid this race?}
 \\ \\
-The race can be avoided by setting the current thread's priority to \texttt{NEW\_PRIORITY}. This function assumes \texttt{ready\_list} is priority-wise sorted list. We modified the ready list and use a lock on the ready list so that there can be now data races.
+A potential race in \texttt{thread\_set\_priority()} is that in (line A6a) we have that the current thread is setting its base priority to new priority. And there could be an interrupt before we call \texttt{update\_priority()}, which would mean that the thread's base priority is not updated properly. We disable interrupts in order to avoid this race condition. We cannot use locks in this situation as the interrupt could still happen before \texttt{update\_priority()} is called.
 \\ \\
-In thread.c,
+In thread.c, we added:
 \begin{lstlisting}
     void thread_set_priority (int new_priority)
     {
@@ -257,7 +268,7 @@ In thread.c,
 
       enum intr_level level = intr_disable();
       int priority_prev = thread_current()->priority;
-      thread_current()->base_priority = new_priority;
+      thread_current()->base_priority = new_priority;                                   (Line A6a)
       update_priority();
 
       if(priority_prev < thread_current()->priority) {
@@ -277,8 +288,8 @@ In thread.c,
 \subsubsection*{A7: (5 marks) }
 \textit{Why did you choose this design?  In what ways is it superior to another design you considered?}
 \\ \\
-TOWRITE
-
+We chose to use interrupts most of the time, instead of locks because it made the code clearer and it was a good way to make sure that in a block of code which was updating a value of the thread, that only one thread would be running and we would not have any races.
+The reason why we decided to used a priority-based sorted ready\_list is because it makes it much more efficient for the function check\_max\_priority to check against the list since it can be assumed that the front has the highest priority, therefore it requires constant time. However, a disadvantage to this is that insertion into the list has higher cost because list\_insert\_ordered is used instead of list\_push\_back, which in the worst case requires a comparison against every element of the list. We believe that this design is superior to a non-sorted ready\_list because it is overall more efficient and much clearer conceptually.
 
 \section{ADVANCED SCHEDULER}
 
@@ -287,41 +298,31 @@ TOWRITE
 \subsection*{B1: (5 marks) }
 
 \textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
-\\
-
-In thread.h,
+\\\\
+In thread.h, we added:
 \begin{lstlisting}
     struct thread
       {
-
-        /* Nice Range */
-        #define NICE_DEFAULT 0                  /* Default niceness */
-        #define NICE_MIN -20                    /* Minumum niceness */
-        #define NICE_MAX 20                     /* Maximum niceness */
-
-        #define CPU_NUM_DEFAULT 0
-        #define LOAD_AVG_DEFAULT 0
-        #define DEPTH_LIMIT 8
-
         ...
-
         /* TASK 1: Advanced scheduling */
         int cpu_num;
         int nice;
         ...
         };
-
-        ...
-
-        * TASK 1: Advanced scheduling */
-
-        /* mlfqs functions */
-        void recalculate_mlfqs(void);
-        void priority_thread_mlfqs(struct thread* t, void *aux UNUSED);
-        void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED);
-        void load_avg_thread_mlfqs (void);
-
 \end{lstlisting}
+\\\\
+In 'thread.c', we added:
+\begin{lstlisting}
+    static int load_avg;
+\end{lstlisting}
+ \\\\
+Purpose of each new addition:
+
+\texttt{int cpu\_num}: the recent CPU value of the current thread in fixed point.
+
+\texttt{int nice}: niceness value of the current thread.
+
+\texttt{int load\_avg}: the system's load average value in fixed point.
 
 
 \subsection{ALGORITHMS}
@@ -333,41 +334,63 @@ In thread.h,
 \centering
 \begin{tabular}{llllllll}
 \multirow{2}{*}{\begin{tabular}[c]{@{}c@{}}timer\\ ticks\end{tabular}} & \multicolumn{3}{c|}{recent\_cpu} & \multicolumn{3}{c|}{priority} & thread to run \\ \cline{2-8}
-                                                                       & A         & B         & C        & A        & B        & C       &               \\ \hline
-                                                                       0           &          &          &         &        &        &       &              \\ \hline
-                                                                       4           &          &          &         &        &        &       &              \\ \hline
-                                                                       8           &          &          &         &        &        &       &              \\ \hline
-                                                                       12          &          &          &         &        &        &       &              \\ \hline
-                                                                       16          &          &          &         &        &        &       &              \\ \hline
-                                                                       20          &          &          &         &        &        &       &              \\ \hline
-                                                                       24          &          &          &         &        &        &       &              \\ \hline
-                                                                       28          &          &          &         &        &        &       &              \\ \hline
-                                                                       32          &          &          &         &        &        &       &              \\ \hline
-                                                                       36          &          &          &         &        &        &       &              \\ \hline
+                                                                       & A         & B         & C       & A        & B        & C       &               \\ \hline
+                                                                       0           & 0         & 0       & 0        & 63       & 61       & 59      & A             \\ \hline
+                                                                       4           & 4         & 0       & 0        & 62       & 61       & 59      & A             \\ \hline
+                                                                       8           & 8         & 0       & 0        & 61       & 61       & 59      & B             \\ \hline
+                                                                       12          & 8         & 4       & 0        & 61       & 60       & 59      & A            \\ \hline
+                                                                       16          & 12        & 4       & 0        & 60       & 60       & 59      & B             \\ \hline
+                                                                       20          & 12        & 8       & 0        & 60       & 59       & 59      & A             \\ \hline
+                                                                       24          & 16        & 8       & 0        & 59       & 59       & 59      & C             \\ \hline
+                                                                       28          & 16        & 8       & 4        & 59       & 59       & 58      & B            \\ \hline
+                                                                       32          & 16        & 12      & 4        & 59       & 58       & 58      & A             \\ \hline
+                                                                       36          & 20        & 12      & 4        & 58       & 58       & 58      & C             \\ \hline
                                                                        \end{tabular}
 \end{table}
 
 \subsubsection*{B3: (5 marks) }
 \textit{Did any ambiguities in the scheduler specification make values in the table uncertain?  If so, what rule did you use to resolve them?  Does this match the behaviour of your scheduler?}
 \\ \\
-TOWRITE
+They were some ambiguities in the scheduler specification. For example,it does not specify what happens what thread is supposed to run if multiple threads all have the same priority. We are not told which thread is supposed to run in this instance.
+  \\\\
+In order to solve this problem, we use both the Round Robin and FIFO(first in, first out) rules which is what our scheduler implements as well.
+  \\\\
+For the FIFO implementation, the \texttt{ready\_list} contains all the threads which are ready to run. So, if the scheduler needs to choose between multiple threads to run, it simply chooses the first thread in the \texttt{ready\_list}, which by default is the thread who has the lowest running time.
+  \\\\
+For the Round Robin implementation, if the current (running) thread has the same priority as a ready thread, and this priority also happens to be the highest priority, then when the current thread reaches the \texttt{TIME\_SLICE} (4 ticks), it continues running regardless.
 
 \subsubsection*{B4: (5 marks) }
 \textit{How is the way you divided the cost of scheduling between code inside and outside interrupt context likely to affect performance?}
 \\ \\
-TOWRITE
+Since the load average, cpu and priority of mlfqs all have to be calculated after a set amount of time. We are given that the load average and cpu have to be calculated every one second, and also the thread priority has to recalculated every 4 ticks. It is therefore neccessary to have these calculations in the timer interrupt handler. However, it would be better if the calculations were not done in the interrupt handler. This is because, the thread that is interrupted would have less running time and also stops the running of other interrupts . So with more threads that are interrupted, the more the performance is affected.
 
 \subsection{RATIONALE}
 
 \subsubsection*{B5: (5 marks) }
 \textit{Briefly critique your design, pointing out advantages and disadvantages in your design choices.}
 \\ \\
-TOWRITE
+ Calculating the load average, the cpu and the derived thread priority in the
+  timer interrupt handler will allow the scheduler to be more dynamic as it can
+  keep up to date with what is happening every certain number of ticks (4 in this case).
+  On the other hand this will severely slow down performance since the timer interrupt
+  handler gets called constantly and therefore there is a large amount of computation
+  executed frequently.
+\\ \\
+Another disadvantage is the lack of use of locks in our code, which in some cases could make it inefficient when running threads. Also it may have been better if the fixed point functions were implemented as macros rather than functions since we are only using the functions in the one file.
+
 
 \subsubsection*{B6: (5 marks) }
 \textit{The assignment explains arithmetic for fixed-point mathematics in detail, but it leaves it open to you to implement it.  Why did you decide to implement it the way you did?  If you created an abstraction layer for fixed-point mathematics, that is, an abstract data type and/or a set of functions or macros to manipulate fixed-point numbers, why did you do so?  If not, why not?S}
 \\ \\
-TOWRITE
-
+We created one header file for the implementations of fixed point arithmetic
+  - fixedpointrealarith.h. We used functions which performed the calculations
+  needed. We chose to implement it like this for the following reasons.
+    - Easy to call the functions to calculate in thread.c
+	- Each function name was given clearly for example \texttt{div\_x\_y} and \texttt{div\_x\_n}
+	  where in each function name, x and y would represent fixed-point numbers
+	  and n would represent an integer.
+	- If for any reason, an error was made in the implementation of the function
+      since we only wrote the calculations once, it was easy to change the offending
+      function (since it was only in the .h file).
 
 \end{document}
