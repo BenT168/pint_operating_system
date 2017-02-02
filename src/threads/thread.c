@@ -11,7 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-  #include "threads/fixedpointrealarith.h"
+#include "threads/fixedpointrealarith.h"
 #include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -806,7 +806,6 @@ void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED)
   ASSERT(timer_ticks () % TIME_SLICE == 0);
 
   int cpu_recent = t->cpu_num;
-  int load_avg_curr = load_avg;
 
   // (2*load_avg)
   curr_load_avg = mul_x_n(curr_load_avg, 2);

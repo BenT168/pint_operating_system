@@ -98,7 +98,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int eff_priority;                   /* Effective priority */
+    int eff_priority;                   /* TASK 1 : Effective priority */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -113,13 +113,13 @@ struct thread
     int64_t wake_up_tick;               /* Keep track the tick when sleeping
                                           thread wakes up */
 
-    /* TASK 1 */
+    /* TASK 1 : Priority Checking */
     int base_priority;                /* initial priority of thread */
     struct list_elem donation_thread; /* thread element that is donated */
     struct lock* lock_waiting;        /* lock that thread is waiting for */
     struct list threads_donated;      /* list of threads */
 
-    // Advanced scheduling
+    /* TASK 1: Advanced scheduling */
     int cpu_num;
     int nice;
 
@@ -165,14 +165,17 @@ int thread_get_load_avg (void);
 
 struct thread *thread_for_sema_list_elem (const struct list_elem *);
 
+/* TASK 1 : Priority Checking */
 bool is_lower_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void update_priority(void);
 void donate_priority(void);
 void check_max_priority(void);
 void remove_with_lock(struct lock* l);
 
-// mlfqs functions
 
+/* TASK 1: Advanced scheduling */
+
+/* mlfqs functions */
 void recalculate_mlfqs(void);
 void priority_thread_mlfqs(struct thread* t, void *aux UNUSED);
 void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED);
