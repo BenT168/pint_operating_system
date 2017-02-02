@@ -24,14 +24,14 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-/* Nice Range */
+/* TASK 1 : Nice Range */
 #define NICE_DEFAULT 0                  /* Default niceness */
 #define NICE_MIN -20                    /* Minumum niceness */
 #define NICE_MAX 20                     /* Maximum niceness */
 
-#define CPU_NUM_DEFAULT 0
-#define LOAD_AVG_DEFAULT 0
-#define DEPTH_LIMIT 8
+#define CPU_NUM_DEFAULT 0               /* Default cpu_num */
+#define LOAD_AVG_DEFAULT 0              /* Default load_avg */
+#define DEPTH_LIMIT 8                   /* Limit for nested donation */
 
 /* A kernel thread or user process.
 
@@ -120,8 +120,8 @@ struct thread
     struct list threads_donated;      /* list of threads */
 
     /* TASK 1: Advanced scheduling */
-    int cpu_num;
-    int nice;
+    int cpu_num;                        /* Time spent in the CPU recently */
+    int nice;                           /* Index of greediness for CPU */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
