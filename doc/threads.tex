@@ -5,10 +5,17 @@
 \usepackage{color}
 \usepackage{multirow}
 \usepackage{tikz}
+\usepackage{graphicx}
+\usepackage{caption}
 \usetikzlibrary{shapes.geometric, arrows}
 
-\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black]
-
+\tikzstyle{blocked} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, text width=3cm, draw=black, fill=red!30]
+\tikzstyle{ready} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, text width=3cm, draw=black, fill=yellow!30]
+\tikzstyle{running} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, text width=3cm, draw=black, fill=green!30]
+\tikzstyle{io} = [trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!30]
+\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=orange!30]
+\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!30]
+\tikzstyle{arrow} = [thick,->,>=stealth]
 
 \setlength{\parskip}{0.5em}
 
@@ -63,7 +70,7 @@ Purpose of each new addition:
 \\ \\
 \texttt{base\_priority}: The base priority of the thread, without taking priority donations into account.
 
-\texttt{donation\_threads}: \texttt{list\_elem} for the donor threads list. The donation thread can be added to another threads's donations
+\texttt{donation\_threads}: \texttt{list\_elem} for the donor threads list. The donation thread can be added to another thread's donations
 
 \texttt{lock\_waiting}: Lock that this thread is waiting on.
 
@@ -75,33 +82,80 @@ Purpose of each new addition:
 \subsection*{A2: (10 marks) }
 
 \textit{Explain the data structure used to track priority donation. Give a diagram that illustrates a nested donation in your structure.}
-\\ \\
-Priority donation is tracked using \texttt{struct list thread\_donated}, which is part of each
-\texttt{struct thread}. \texttt{thread\_donated} is ordered in increasing order of priority of the elements.
-\\ \\
-Suppose we have three locks L1, L2 and L3. Also, suppose we have four threads T1, T2, T3 and T4.
-We have a list of threads:
-\\ \\
-List of T's : T1 - T2 - T3 - T4
-\\ \\
-And T1 has lock\_waiting =  L1
-\\ \\
-T2 has lock\_waiting  = L2
-\\ \\
-T3 has lock\_waiting =  L3
-\\ \\
-And finally, T4 is not waiting on any lock, so the lock\_waiting is set to NULL.
-\\ \\
-Map of threads and locks :
-( T1, L1 )  - ( T2, L2 ) - ( T3, L3 ) - ( T4, NULL )
-\\ \\
-We have that
-\\ \\
-T3's threads\_donated = T1 , T2.
-And its donated priority is the maximum of T3 ,T1 and T2.
-\\ \\
-T4's threads\_donated = T3.
-And its donated priority is the maximum of T3 and T2.
+
+Consider 3 threads:
+
+\begin{itemize}
+\item Thread T1, initial priority 31.
+\item Thread T2, initial priority 32.
+\item Thread T3, initial priority 33.
+\end{itemize}
+
+Now assume that the threads execute as follows.
+
+\begin{center}
+T1 = \{\ldots down(L1) \ldots up(L1) \ldots \}
+\end{center}
+\begin{center}
+T2 = \{\ldots down(L2) \ldots down(L1) \ldots up(L1) \ldots up(L2) \ldots \}
+\end{center}
+\begin{center}
+T3 = \{\ldots down(L2) \ldots up(L2) \ldots \}
+\end{center}
+
+Assume that at time \textit{t0}, threads \texttt{T1} and \texttt{T2} have acquired locks \texttt{L1} and \texttt{L2} respectively. At time \textit{t1}, thread \texttt{T3} begins running. At time \textit{t2}, thread \texttt{T3} attempts to acquire lock \texttt{L2} but is prevented from doing so since lock \texttt{L2} has already been acquired by thread \texttt{T2}. But since \texttt{T3} has a higher priority than \texttt{T2}, \texttt{T3} donates it's priority to \texttt{T2}. Priority donation work as follows.
+
+\begin{enumerate}
+\item The \texttt{lock\_waiting} member of \texttt{T3}'s thread \texttt{struct} is initialised to lock \texttt{L2}.
+\item By using the \texttt{list\_elem} \texttt{donation\_thread} member of \texttt{struct thread}, \texttt{T3} is inserted into the \texttt{donated\_threads} list of \texttt{T2}, in descending order of priority, using the comparator \texttt{is\_lower\_priority}.
+\item We then call \texttt{sema\_down()} to put \texttt{T3} to sleep.
+\item However, before \texttt{T3} is actually blocked, we call \texttt{donate\_priority()} to donate thread \texttt{T3}'s priority to the thread holding lock \texttt{L2} - which is \texttt{T2}.
+\item Thread \texttt{T3} is then inserted at the back of the list of waiters on the \texttt{L2}'s semaphore and blocked.
+\item The thread with the next highest priority, \texttt{T2} is then run and eventually performs the same operations, with respect to lock \texttt{L1}.
+\item When thread \texttt{T1} runs (as the other two threads with higher priorities are blocked) it wille eventually release lock \texttt{L1}. Upon doing so, \texttt{T1}'s priority is reset to the priority it had upon acquisition of lock \texttt{L1}.
+\item Upon lowering it's priority, \texttt{T1} is blocked and and \texttt{T2} is run. Similarly, when \texttt{T2} releases lock \texttt{L2} and releases it's inherited priority (that is, lower it's priority down to that which it had upon acquisition of \texttt{L2}), \texttt{T3} preempts \texttt{T2} and \texttt{T3} continues its execution.
+\end{enumerate}
+
+\newpage
+The following depicts the changes in thread state as priorities are donated, with respect to time. Red blocks denote blocked threads; yellow blocks denote threads on the ready queue and the green block denotes the running thread.
+\\\\
+
+\begin{tikzpicture}[node distance=2cm]
+\node (startA) [ready] {T1: 31};
+\node (startB) [ready, right of=startA, xshift=4cm] {T2: 32};
+\node (startC) [running, right of=startB, xshift=4cm] {T3: 33};
+
+\node (startA1) [ready, below of=startA, yshift=0.5cm] {T1: 31};
+\node (startB1) [running, below of=startB, yshift=0.5cm] {T2: 33};
+\node (startC1) [blocked, below of=startC, yshift=0.5cm] {T3: 33};
+\draw [arrow] (startC1) -- node[anchor=south] {donates priority} (startB1);
+
+\node (startA2) [running, below of=startA1, yshift=0.5cm] {T1: 33};
+\node (startB2) [blocked, below of=startB1, yshift=0.5cm] {T2: 33};
+\node (startC2) [blocked, below of=startC1, yshift=0.5cm] {T3: 33};
+\draw [arrow] (startB2) -- node[anchor=south] {donates priority} (startA2);
+
+\node (startA3) [ready, below of=startA2, yshift=0.5cm] {T1: 31};
+\node (startB3) [running, below of=startB2, yshift=0.5cm] {T2: 33};
+\node (startC3) [blocked, below of=startC2, yshift=0.5cm] {T3: 33};
+\draw [arrow] (startA3) -- node[anchor=south] {releases priority} (startB3);
+
+\node (startA4) [ready, below of=startA3, yshift=0.5cm] {T1: 31};
+\node (startB4) [ready, below of=startB3, yshift=0.5cm] {T2: 33};
+\node (startC4) [running, below of=startC3, yshift=0.5cm] {T3: 33};
+\draw [arrow] (startB4) -- node[anchor=south] {releases priority} (startC4);
+\end{tikzpicture}
+
+\begin{figure}
+\centering
+\captionsetup{justification=centering}
+
+\includegraphics[width=\linewidth]{nested_donation_diagram.png}
+\caption{Shows how nested priority donation is implemented. Curved arrows denote a pointer from one thread to another.}
+\label{fig:diagram}
+\end{figure}
+
+
 
 
 \subsection{ALGORITHMS}
@@ -117,103 +171,17 @@ For locks and semaphores, this is handled by sorting the waiters list by the pri
 \\ \\
 The \texttt{lock\_acquire} function first checks whether the basic, priority donation policy is enabled and whether the lock in question has already been acquired by another thread. If both these conditions hold, then the \texttt{lock\_waiting} field of the current thread is assigned the value \texttt{lock} - where \texttt{lock} is simply a pointer to the lock in question. The current thread - through its \texttt{donation\_thread} field - is then inserted into the \texttt{threads\_donated} list of the thread currently holding the lock. This insertion is actually an ordered insertion, using the comparator \texttt{is\_lower\_priority} to maintain the invariant that list of waiting threads is sorted in ascending order of priority. Both \texttt{donation\_thread} and \texttt{threads\_donated} are stored in \texttt{struct thread}.
 After calling \texttt{sema\_down}, the current thread's \texttt{wait\_lock} is reset to \texttt{NULL}.
-\\ \\
-
-\begin{lstlisting}
-    void lock_acquire (struct lock *lock)
-    {
-      ...
-
-      if(!thread_mlfqs && lock->holder != NULL) {
-        thread_current()->lock_waiting = lock;
-        list_insert_ordered(&lock->holder->threads_donated,
-                    &thread_current()->donation_thread, &is_lower_priority, NULL);
-      }
-
-      sema_down (&lock->semaphore);
-      thread_current()->lock_waiting = NULL;
-      lock->holder = thread_current();
-    }
-\end{lstlisting}
-
-To handle the nestled donation, \texttt{donate\_priority()} declare a new struct thread and lock for  its execution. This function checks to see if the current thread has a donee by
-using the \texttt{lock\_waiting} field. If it does have one, that threads \texttt{threads\_donated}
-is reordered using \texttt{update\_priority()}. This function updates priority member in thread struct with the effective priority (i.e. taking into account donations).
-
-\begin{lstlisting}
-    void donate_priority(void) {
-      int depth = 0;
-      struct thread *t = thread_current();
-      struct lock *l = t->lock_waiting;
-      while(l != NULL && depth < DEPTH_LIMIT) {
-        depth++;
-
-        if(l->holder == NULL) return;
-        if(l->holder->priority >= t->priority) return;
-
-        l->holder->priority = t->priority;
-        t = l->holder;
-        l = t->lock_waiting;
-      }
-    }
-
-    void update_priority(void) {
-      struct thread *t = thread_current();
-      t->priority = t->base_priority;
-      if(list_empty(&t->threads_donated)) {
-        return;
-      }
-      struct thread *t2 = list_entry(list_front(&t->threads_donated),
-                                   struct thread, donation_thread);
-
-      if(t2->priority > t->priority) {
-         t->priority = t2->priority;
-       }
-      }
-\end{lstlisting}
-
+To handle nested donation, \texttt{donate\_priority()} declares a new struct thread and lock for its execution. This function checks if the current thread has a donee by using the \texttt{lock\_waiting} field. If it does have one, that threads \texttt{threads\_donated} is reordered using \texttt{update\_priority()}. This function updates the priority member in thread struct with the effective priority (i.e. taking into account donations).
+\\\\
 
 \subsubsection*{A5: (5 marks) }
 \textit{Describe the sequence of events when \texttt{lock\_release()} is called on a lock that a higher-priority thread is waiting for.}
 \\ \\
-If \texttt{thread\_mlfqs} returns false, call \texttt{remove\_from\_lock(lock)} on all elements of lock to remove the item from \texttt{threads\_donated} threads waiting for lock l.
+Upon a call of \texttt{lock\_release()}, after checking that advanced scheduler mode is off (\texttt{thread\_mlfqs = false}), a call to \texttt{remove\_with\_lock(lock)} is executed passing the lock as argument. This function removes every item from the list \texttt{threads\_donated} which is waiting for lock l.
+Note that since the lock waiters list is ordered (as mentioned in A3) we can assume that the new owner of the lock will be the first element of this list. As such, we donate the priority of all other waiters in the list to its first element.
+Then, back to the \texttt{lock\_release()} context, \texttt{update\_priority} is called. This changes the priority of the current thread only if the priority of the first element of the \texttt{threads\_donated} is greater than its current priority, so it will change the priority to the first elements priority. Since list \texttt{threads\_donated} is sorted highest to lowest priority, now the current thread has the highest priority of all the \texttt{threads\_donated} (except for the first element which it is equal to).
+Finally, \texttt{sema\_up} is called which unblocks the first element of the waiters list.
 \\ \\
-Note that since the semaphores waiters list is ordered (as mentioned in A3) we know that the new owner of the lock will be the first element of this list. As such we donate the priority of all other waiters in the list to its first element.
-\\ \\
-After this \texttt{sema\_up} is called which unblocks the first element of the waiters list.
-\\ \\
-In thread.c, we added:
-\begin{lstlisting}
-    /* TASK 1: Removes from list threads_donated threads waiting for lock l */
-    void remove_with_lock(struct lock* l) {
-      struct list_elem* e = list_begin(&thread_current()->threads_donated);
-      struct list_elem* next;
-      while(e != list_end(&thread_current()->threads_donated)) {
-        struct thread* t = list_entry(e, struct thread, donation_thread);
-        next = list_next(e);
-        if(t->lock_waiting == l) {
-          list_remove(e);
-        }
-        e = next;
-      }
-    }
-\end{lstlisting}
-
-In synch.c, we added:
-\begin{lstlisting}
-    void lock_release (struct lock *lock)
-    {
-      ...
-      //TASK 1
-      if(!thread_mlfqs) {
-        remove_with_lock(lock);
-        update_priority();
-      }
-      sema_up (&lock->semaphore);
-    }
-
-\end{lstlisting}
-
 
 
 \subsection{SYNCHRONIZATION}
@@ -221,7 +189,7 @@ In synch.c, we added:
 \subsubsection*{A6: (5 marks) }
 \textit{Describe a potential race in \texttt{thread\_set\_priority()} and explain how your implementation avoids it.  Can you use a lock to avoid this race?}
 \\ \\
-A potential race in \texttt{thread\_set\_priority()} is that in (line A6a) we have that the current thread is setting its base priority to new priority. And there could be an interrupt before we call \texttt{update\_priority()}, which would mean that the thread's base priority is not updated properly. We disable interrupts in order to avoid this race condition. We cannot use locks in this situation as the interrupt could still happen before \texttt{update\_priority()} is called.
+A potential race in \texttt{thread\_set\_priority()} is that in (line A6a) we have that the current thread is setting its base priority to new priority and there could be an interrupt before we call \texttt{update\_priority()}, which would mean that the thread's base priority is not updated properly. We disable interrupts in order to avoid this race condition. We cannot use locks in this situation as the interrupt could still happen before \texttt{update\_priority()} is called.
 \\ \\
 In thread.c, we added:
 \begin{lstlisting}
@@ -326,7 +294,7 @@ For the Round Robin implementation, if the current (running) thread has the same
 \subsubsection*{B4: (5 marks) }
 \textit{How is the way you divided the cost of scheduling between code inside and outside interrupt context likely to affect performance?}
 \\ \\
-Since the load average, cpu and priority of mlfqs all have to be calculated after a set amount of time. We are given that the load average and cpu have to be calculated every one second, and also the thread priority has to recalculated every 4 ticks. It is therefore neccessary to have these calculations in the timer interrupt handler. However, it would be better if the calculations were not done in the interrupt handler. This is because, the thread that is interrupted would have less running time and also stops the running of other interrupts . So with more threads that are interrupted, the more the performance is affected.
+Since the load average, cpu and priority of mlfqs all have to be calculated after a set amount of time (we are given that the load average and cpu have to be calculated every one second and the thread priority has to recalculated every 4 ticks), it is therefore neccessary to have these calculations in the timer interrupt handler. However, it would be more efficient if the calculations were not done in the interrupt handler because the thread that is interrupted would have less running time and it would stop the running of other interrupts as well. So with more threads that are interrupted, the more performance is affected.
 
 \subsection{RATIONALE}
 
@@ -343,7 +311,7 @@ Other disadvantages affecting performance are the lack of use of locks in our co
 \\ \\
 
 \subsubsection*{B6: (5 marks) }
-\textit{The assignment explains arithmetic for fixed-point mathematics in detail, but it leaves it open to you to implement it.  Why did you decide to implement it the way you did?  If you created an abstraction layer for fixed-point mathematics, that is, an abstract data type and/or a set of functions or macros to manipulate fixed-point numbers, why did you do so?  If not, why not?S}
+\textit{The assignment explains arithmetic for fixed-point mathematics in detail, but it leaves it open to you to implement it.  Why did you decide to implement it the way you did?  If you created an abstraction layer for fixed-point mathematics, that is, an abstract data type and/or a set of functions or macros to manipulate fixed-point numbers, why did you do so?  If not, why not?}
 \\ \\
 We created one header file for the implementations of fixed point arithmetic: \texttt{fixedpointrealarith.h}, which includes functions that perform the calculations needed.
 We chose to implement it like this for the following reasons:
