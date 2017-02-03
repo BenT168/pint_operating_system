@@ -4,6 +4,11 @@
 \usepackage{listings}
 \usepackage{color}
 \usepackage{multirow}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows}
+
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black]
+
 
 \setlength{\parskip}{0.5em}
 
@@ -104,57 +109,15 @@ And its donated priority is the maximum of T3 and T2.
 \subsubsection*{A3: (5 marks) }
 \textit{How do you ensure that the highest priority thread waiting for a lock, semaphore, or condition variable wakes up first?}
 \\ \\
-For locks and semaphores, this is handled at the semaphore level, by ordering the waiters list by the priority of the threads. For condition variables, since each semaphore in the list of waiters has exactly one thread, it is ordered in increasing order of priority of the thread in each semaphore.
-A thread is woken up by popping the first element off the semaphore's waiters list, and unblocking it, and for condition variables, the semaphore to call \texttt{sema\_up} on is also the first element in its waiters list.
-\\\\
-In sych.c,
-\begin{lstlisting}
-    void sema_up (struct semaphore *sema)
-    {
-      ...
-      /* TASK 1: Tests the maximum priority: if the new thread has higher priority than the currently running thread then let the former run first. */
-      if(!intr_context()) {
-        check_max_priority();
-      }
-      intr_set_level (old_level);
-    }
-\end{lstlisting}
-
-In thread.c,
-\begin{lstlisting}
-    void check_max_priority(void)
-    {
-        if(list_empty(&ready_list)) {
-            return;
-        }
-
-        struct thread* t = list_entry(list_front(&ready_list), struct thread, elem);
-
-        if(intr_context()) {
-            thread_ticks++;
-            if(thread_current ()->priority < t->priority || (thread_ticks >= TIME_SLICE
-                            && thread_current()-> priority == t->priority)) {
-               intr_yield_on_return();
-            }
-            return;
-        }
-
-        if(thread_current()->priority < t->priority) {
-         thread_yield();
-        }
-    }
-
-\end{lstlisting}
-
+For locks and semaphores, this is handled by sorting the waiters list by the priority of the threads. For example, when a thread goes to sleep on some lock or semaphore, \texttt{sema}, it is added to the list \texttt{\&sema->waiters} or \texttt{\&lock->waiters}. One of the invariants maintained on these list is that their elements - the threads waiting on the or lock semaphore - are always sorted in descending order of priority. This invariant is maintained by always adding elements to the list using the \texttt{list\_insert\_ordered} function, and passing the comparator, \texttt{is\_lower\_priority} as the necessary, element comparison function. A thread is woken up by popping the first element off the lock's or semaphore's waiters list, so unblocking it. For condition variables, since each semaphore in the list of waiters has exactly one thread, it is sorted in increasing order of priority of the thread in each semaphore and the semaphore to call \texttt{sema\_up} on is also the first element in its waiters list.
+\\ \\
 
 \subsubsection*{A4: (5 marks) }
 \textit{Describe the sequence of events when a call to \texttt{lock\_acquire()} causes a priority donation. How is nested donation handled?}
 \\ \\
-If the lock has a holder, the current thread's \texttt{lock\_waiting} is updated with that lock.
-Its priority is then donated to the lock holder. If in priority donation mode, set thread as waiting for the lock and insert current's \texttt{donation\_thread} into list \texttt{threads\_donated}. This function also adds the donor thread to
-the \texttt{donor\_threads} of the donate thread.
-\\ \\
+The \texttt{lock\_acquire} function first checks whether the basic, priority donation policy is enabled and whether the lock in question has already been acquired by another thread. If both these conditions hold, then the \texttt{lock\_waiting} field of the current thread is assigned the value \texttt{lock} - where \texttt{lock} is simply a pointer to the lock in question. The current thread - through its \texttt{donation\_thread} field - is then inserted into the \texttt{threads\_donated} list of the thread currently holding the lock. This insertion is actually an ordered insertion, using the comparator \texttt{is\_lower\_priority} to maintain the invariant that list of waiting threads is sorted in ascending order of priority. Both \texttt{donation\_thread} and \texttt{threads\_donated} are stored in \texttt{struct thread}.
 After calling \texttt{sema\_down}, the current thread's \texttt{wait\_lock} is reset to \texttt{NULL}.
+\\ \\
 
 \begin{lstlisting}
     void lock_acquire (struct lock *lock)
@@ -329,7 +292,7 @@ Purpose of each new addition:
 \subsection{ALGORITHMS}
 
 \subsubsection*{B2: (5 marks) }
-\textit{HSuppose threads A, B, and C have nice values 0, 1, and 2.  Each has a \texttt{recent\_cpu} value of 0.  Fill in the table below showing the scheduling decision and the priority and \texttt{recent\_cpu} values for each thread after each given number of timer ticks:}
+\textit{Suppose threads A, B, and C have nice values 0, 1, and 2.  Each has a \texttt{recent\_cpu} value of 0.  Fill in the table below showing the scheduling decision and the priority and \texttt{recent\_cpu} values for each thread after each given number of timer ticks:}
 
 \begin{table}[htb]
 \centering
@@ -354,7 +317,7 @@ Purpose of each new addition:
 \\ \\
 They were some ambiguities in the scheduler specification. For example,it does not specify what happens what thread is supposed to run if multiple threads all have the same priority. We are not told which thread is supposed to run in this instance.
   \\\\
-In order to solve this problem, we use both the Round Robin and FIFO(first in, first out) rules which is what our scheduler implements as well.
+In order to solve this problem, we use both the Round Robin and FIFO (first in, first out) rules which is what our scheduler implements as well.
   \\\\
 For the FIFO implementation, the \texttt{ready\_list} contains all the threads which are ready to run. So, if the scheduler needs to choose between multiple threads to run, it simply chooses the first thread in the \texttt{ready\_list}, which by default is the thread who has the lowest running time.
   \\\\
@@ -376,20 +339,21 @@ Since the load average, cpu and priority of mlfqs all have to be calculated afte
   On the other hand this will severely slow down performance since the timer interrupt
   handler gets called constantly and therefore there is a large amount of computation
   executed frequently.
+Other disadvantages affecting performance are the lack of use of locks in our code - which in some cases could make it inefficient when running threads - and the fixed point function definitions: it may have been faster if the fixed point functions were implemented as macros rather than functions, since we are only using them in the one file. On the upside, these design choices have the advantage of clarity.
 \\ \\
-Another disadvantage is the lack of use of locks in our code, which in some cases could make it inefficient when running threads. Also it may have been better if the fixed point functions were implemented as macros rather than functions since we are only using the functions in the one file.
-
 
 \subsubsection*{B6: (5 marks) }
 \textit{The assignment explains arithmetic for fixed-point mathematics in detail, but it leaves it open to you to implement it.  Why did you decide to implement it the way you did?  If you created an abstraction layer for fixed-point mathematics, that is, an abstract data type and/or a set of functions or macros to manipulate fixed-point numbers, why did you do so?  If not, why not?S}
 \\ \\
-We created one header file for the implementations of fixed point arithmetic
-  - fixedpointrealarith.h. We used functions which performed the calculations
-  needed. We chose to implement it like this for the following reasons.
+We created one header file for the implementations of fixed point arithmetic: \texttt{fixedpointrealarith.h}, which includes functions that perform the calculations needed.
+We chose to implement it like this for the following reasons:
+
     - Easy to call the functions to calculate in thread.c
+    
 	- Each function name was given clearly for example \texttt{div\_x\_y} and \texttt{div\_x\_n}
 	  where in each function name, x and y would represent fixed-point numbers
 	  and n would represent an integer.
+      
 	- If for any reason, an error was made in the implementation of the function
       since we only wrote the calculations once, it was easy to change the offending
       function (since it was only in the .h file).
