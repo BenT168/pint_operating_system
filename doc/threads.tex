@@ -3,6 +3,7 @@
 \usepackage{fullpage}
 \usepackage{listings}
 \usepackage{color}
+\usepackage{multirow}
 
 \setlength{\parskip}{0.5em}
 
@@ -52,9 +53,9 @@ In thread.h, we added:
       };
 
 \end{lstlisting}
-\\
-Purpose of each new addition:
 
+Purpose of each new addition:
+\\ \\
 \texttt{base\_priority}: The base priority of the thread, without taking priority donations into account.
 
 \texttt{donation\_threads}: \texttt{list\_elem} for the donor threads list. The donation thread can be added to another threads's donations
@@ -118,7 +119,7 @@ In sych.c,
       intr_set_level (old_level);
     }
 \end{lstlisting}
-\\\\
+
 In thread.c,
 \begin{lstlisting}
     void check_max_priority(void)
@@ -171,7 +172,7 @@ After calling \texttt{sema\_down}, the current thread's \texttt{wait\_lock} is r
       lock->holder = thread_current();
     }
 \end{lstlisting}
-\\ \\
+
 To handle the nestled donation, \texttt{donate\_priority()} declare a new struct thread and lock for  its execution. This function checks to see if the current thread has a donee by
 using the \texttt{lock\_waiting} field. If it does have one, that threads \texttt{threads\_donated}
 is reordered using \texttt{update\_priority()}. This function updates priority member in thread struct with the effective priority (i.e. taking into account donations).
@@ -234,7 +235,7 @@ In thread.c, we added:
       }
     }
 \end{lstlisting}
-\\ \\
+
 In synch.c, we added:
 \begin{lstlisting}
     void lock_release (struct lock *lock)
@@ -310,12 +311,12 @@ In thread.h, we added:
         ...
         };
 \end{lstlisting}
-\\\\
+
 In 'thread.c', we added:
 \begin{lstlisting}
     static int load_avg;
 \end{lstlisting}
- \\\\
+
 Purpose of each new addition:
 
 \texttt{int cpu\_num}: the recent CPU value of the current thread in fixed point.
