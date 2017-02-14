@@ -34,14 +34,12 @@ process_execute (const char *file_name)
  // TASK 2
   char* token;
   char* save_ptr;
-  int i = 0;
 
   char** args = (char**)(malloc(1024 * sizeof(char)); //TODO: check that this is actually allocating 4kb (page)
 
-  for (token = strtok_r (s, " ", &save_ptr); token != NULL;
+  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr)) {
          args[i] = token;
-         i++;
        }
 
   /* Make a copy of FILE_NAME.
