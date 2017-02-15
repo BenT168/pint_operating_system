@@ -6,6 +6,8 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 
+/* TASK 2 */
+
 struct process
   {
     tid_t tid;
@@ -21,6 +23,12 @@ struct process
     struct list file_descriptors;
     struct list pid_to_exit_status;
     struct list_elem elem;
+	
+		
+	bool wait;                          /* Checks if thread is in proces_wait */
+	bool exit;                          /* Checks if thread has exited */
+	int exit_status                     /* exit status of thread */
+	struct list children;               /* list of threads children processes */
   };
 
 tid_t process_execute (const char *file_name);

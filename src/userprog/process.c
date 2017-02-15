@@ -162,7 +162,25 @@ and jump to it. */
 int
 process_wait (tid_t child_tid UNUSED)
 {
-  return -1;
+  struct thread* child; 
+  child = get_tid_thread(child_tid);
+  
+  if (child == NULL) {
+    return -1;
+  }
+
+  if(child->proc->parent != thread_current() || child->proc.wait) {
+    return -1;
+  }
+  
+  while(!child->proc.exit) {
+	  //wait
+  }
+  
+  int exit_status = child->proc.exit_status;
+  child->proc.wait = true;
+
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -189,6 +207,7 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 }
+
 
 /* Sets up the CPU for running user code in the current
    thread.

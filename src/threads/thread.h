@@ -109,7 +109,9 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct process proc;		/* Thread process */
+    struct process proc;		        /* Thread process */  
+	struct list file_list;              /* file list used for file system calls */
+	int fd;
 #endif
 
     /* TASK 0 */
@@ -125,8 +127,8 @@ struct thread
     /* TASK 1: Advanced scheduling */
     int cpu_num;                        /* Time spent in the CPU recently */
     int nice;                           /* Index of greediness for CPU */
-
-    /* Owned by thread.c. */
+    
+	/* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
 
@@ -184,6 +186,7 @@ void priority_thread_mlfqs(struct thread* t, void *aux UNUSED);
 void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED);
 void load_avg_thread_mlfqs (void);
 
-
+/* TASK 2 */
+struct thread* get_tid_thread(tid_t tid);
 
 #endif /* threads/thread.h */
