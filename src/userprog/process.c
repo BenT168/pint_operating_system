@@ -109,7 +109,7 @@ start_process (void *file_name_)
 
   /* TASK 2 : Push the argument onto the stack */
   int i;
-  for(i < size - 1; i >= 0; --i) {
+  for(i = size - 1; i >= 0; --i) {
     char *str = *(args + i);
     size_t len = strlen(str) + 1;
     if_.esp -= len;
