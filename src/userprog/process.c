@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 
 #define MAX_ARGS 50
+#define FORK_FAILURE -1
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -163,14 +164,18 @@ and jump to it. */
 int
 process_wait (tid_t child_tid UNUSED)
 {
+  struct thread *cur = thread_current ();
+  /* Processes are single-threaded and PintOS user kernel threads. So we can
+     use a single thread to point to a newly created child process. */
   struct thread* child;
   child = get_tid_thread(child_tid);
 
   if (child == NULL) {
+    /* Child thread terminated by kernel, so return -1.*/
     return -1;
   }
 
-  if(child->parent != thread_current() || child->wait) {
+  if(child->parent != cur || cur->waiting_on_process != child) {
     return -1;
   }
 
