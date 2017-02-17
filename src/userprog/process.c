@@ -102,6 +102,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED)
 {
+  struct thread *cur = thread_current ();
   return -1;
 }
 
