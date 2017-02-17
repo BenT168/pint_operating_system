@@ -342,22 +342,23 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
   #ifdef USERPROG
-/*
+
     struct list_elem *e;
 
     for (e = list_begin (&thread_current ()->child_procs); e != list_end (&thread_current ()->child_procs);
       e = list_next (e)) {
-      struct thread *t = list_entry (e, struct thread, thread_current->child);
+      struct thread *t = list_entry (e, struct thread, child);
       if (!t->exit) {
           t->parent = NULL;
           list_remove (&t->child);
       }
-	} */
+ 	  }
+
     process_exit ();
-/*
+
     if (thread_current ()->parent != NULL && thread_current ()->parent != initial_thread) {
       list_remove (&thread_current ()->child);
-	} */
+	  }
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
