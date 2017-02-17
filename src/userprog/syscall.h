@@ -8,6 +8,8 @@
 
 void syscall_init (void);
 int fd_add_file (struct file *file);
+void halt (void);
+pid_t exec (const char *cmd_line);
 
 struct file* fd_get_file (int fd);
 

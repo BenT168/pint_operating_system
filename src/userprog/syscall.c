@@ -6,6 +6,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
+#include "devices/shutdown.h"
 
 static void syscall_handler (struct intr_frame *);
 static void syscall_exit (int );
@@ -98,4 +99,12 @@ struct file* fd_get_file (int fd)
 	  }
    }
    return NULL;
+}
+
+void halt (void) {
+  shutdown_power_off();
+}
+
+pid_t exec (const char *cmd_line) {
+
 }
