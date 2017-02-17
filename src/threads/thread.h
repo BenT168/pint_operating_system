@@ -109,23 +109,29 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+
+    /* TASK 2 */
     struct file *file;
     bool child_load_success;
     struct semaphore load_sema;
     struct semaphore alive_sema;
 
-    struct thread *parent;
+    struct thread *parent;            /* Thread of parent process ('null' if no
+                                         parent process exists.) */
 
-    struct list child_procs;
+    struct list child_procs;          /* List of threads representing child
+                                         processes that have been spawned by
+                                         this thread's embedding process. */
     struct list file_descriptors;
     struct list pid_to_exit_status;
-    struct list_elem child;
+    struct list_elem child;           /* List element for 'child_procs' list as
+                                         a processes (single-threaded) can be
+                                         both child and parent processes. */
 
-
-    bool wait;                          /* Checks if thread is in proces_wait */
-    bool exit;                          /* Checks if thread has exited */
-    int exit_status;                    /* exit status of thread */
-	  struct list file_list;              /* file list used for file system calls */
+    bool wait;                        /* Checks if thread is in proces_wait */
+    bool exit;                        /* Checks if thread has exited */
+    int exit_status;                  /* exit status of thread */
+	  struct list file_list;            /* File list used for file system calls*/
 	  int fd;
 #endif
 
