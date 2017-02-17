@@ -1,5 +1,4 @@
 #include "userprog/process.h"
-#include <debug.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
@@ -8,6 +7,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -15,8 +15,11 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+
+#define MAX_ARGS 50
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -26,36 +29,44 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name)
-{
-  char *fn_copy;
-  tid_t tid;
+ process_execute (const char *file_name)
+ {
+   char *fn_copy;
+   tid_t tid;
 
- // TASK 2
-  char* token;
-  char* save_ptr;
+   /* Make a copy of FILE_NAME.
+      Otherwise there's a race between the caller and load(). */
+   fn_copy = palloc_get_page (0);
+   if (fn_copy == NULL)
+     return TID_ERROR;
+   strlcpy (fn_copy, file_name, PGSIZE);
 
-  char** args = (char**)(malloc(1024 * sizeof(char)); //TODO: check that this is actually allocating 4kb (page)
+   /* Create a new thread to execute FILE_NAME. */
+   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+   if (tid == TID_ERROR)
+     palloc_free_page (fn_copy);
+   return tid;
+ }
 
-  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
-       token = strtok_r (NULL, " ", &save_ptr)) {
-         args[i] = token;
-       }
+/* TASK 2 : Parsing arguments from filename into a string,
+   returns the size  of argv or -1 if failure. */
 
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, args[0], PGSIZE);
+static int parse_args (char **argv, char *file_name) {
+  char *saveptr;
+  char *arg = strtok_r (file_name, " ", &saveptr);
+  int index = 0;
+  int alloc_byte = 0;
+  while (arg != NULL) {
+    int len = strlen(arg);
+    if (alloc_byte + len > PGSIZE)
+      return -1;
 
-  // TODO PUSH arguments on stack ?????
-
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (args[0], PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
-  return tid;
+    *(argv + index) = arg;
+    alloc_byte += len;
+    arg = strtok_r (NULL, " ", &saveptr);
+    ++index;
+  }
+  return index;
 }
 
 /* A thread function that loads a user process and starts it
@@ -63,29 +74,79 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  /* Adds the new proc to childrens of the current proc */
+  list_push_back (&thread_current ()->parent->child_procs,
+                  &thread_current ()->elem);
+
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  /* TASK 2 : Initialize and set up the stack */
+  char * args[MAX_ARGS];
+  char * argv[MAX_ARGS];
+
+  int size = parse_args(args, file_name);
+
+  if (size == -1)
+    thread_exit ();
+
+  file_name = *args;
+  strlcpy(thread_current()->name, file_name, 15);
+  success = thread_current()->parent->child_load_success
+          = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success)
     thread_exit ();
 
+  /* TASK 2 : Push the argument onto the stack */
+  int i;
+  for(i = size - 1; i >= 0; --i) {
+    char *str = *(args + i);
+    size_t len = strlen(str) + 1;
+    if_.esp -= len;
+    strlcpy(if_.esp, str, len);
+    *(argv + i) = if_.esp;
+  }
+
+  palloc_free_page(file_name);
+
+  /* Word-align */
+  if_.esp -= ((unsigned) if_.esp) % 4;
+  if_.esp -= sizeof(char*);
+  *((char**) if_.esp) = NULL;
+
+  /* TASK 2 : Push pointers to the argument */
+  for (i = size - 1; i >= 0; --i) {
+   if_.esp -= sizeof(char*);
+   *((char**) if_.esp) = *(argv + i);
+  }
+
+  /* TASK 2 : Push a pointer to the first pointer */
+  if_.esp -= sizeof(char**);
+  *((void**) if_.esp) = if_.esp + sizeof(char**);
+
+  /* TASK 2 : Push the number of argument */
+  if_.esp -= sizeof(int);
+  *((int*) if_.esp) = size;
+
+  /* TASK 2 : Push a fake return address (0) */
+  if_.esp -= sizeof(void (*) (void));
+
   /* Start the user process by simulating a return from an
-     interrupt, implemented by intr_exit (in
-     threads/intr-stubs.S).  Because intr_exit takes all of its
-     arguments on the stack in the form of a `struct intr_frame',
-     we just point the stack pointer (%esp) to our stack frame
-     and jump to it. */
+interrupt, implemented by intr_exit (in
+threads/intr-stubs.S). Because intr_exit takes all of its
+arguments on the stack in the form of a `struct intr_frame',
+we just point the stack pointer (%esp) to our stack frame
+and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -102,8 +163,25 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED)
 {
-  struct thread *cur = thread_current ();
-  return -1;
+  struct thread* child;
+  child = get_tid_thread(child_tid);
+
+  if (child == NULL) {
+    return -1;
+  }
+
+  if(child->parent != thread_current() || child->wait) {
+    return -1;
+  }
+
+  while(!child->exit) {
+	  //wait
+  }
+
+  int exit_status = child->exit_status;
+  child->wait = true;
+
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -130,6 +208,7 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 }
+
 
 /* Sets up the CPU for running user code in the current
    thread.

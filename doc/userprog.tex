@@ -1,0 +1,194 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage [utf8]{inputenc}
+\usepackage{xspace} %better spacing option with :
+\usepackage{amsmath,amsthm,amssymb} %package matematici
+\usepackage{amsfonts} % altri simbolo matematici stronzi
+\usepackage{latexsym} %altri simboli chissa quali
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{multicol}
+\usepackage[pdftex]{color}
+\usepackage{url}
+\usepackage{subfigure}
+\usepackage[final]{pdfpages}
+\newcommand{\fncyblank }{\fancyhf {}}
+
+\addtolength{\hoffset}{-1,5cm}
+\addtolength{\textwidth}{3cm}
+
+\definecolor{Gray}{cmyk}{0,0,0,0.50}
+
+\usepackage{sectsty}
+\sectionfont{\large}
+\subsectionfont{\normalsize}
+
+\title{Pintos Task 1: User Programs Design Document}
+\author{Group 07: Ben Sheng Tan, Adanna Akwataghibe, Mark Aduol, Alessio Incitti }
+
+\begin{document}
+\maketitle
+
+\section{ARGUMENT PASSING}
+
+\subsection{ DATA STRUCTURES}
+
+\subsection*{A1: (2 marks) }
+
+\textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
+\\ \\
+In thread.h, we added:
+\begin{lstlisting}
+    struct thread
+      {
+        /* TASK 1 : Priority Checking */
+        int base_priority;                /* initial priority of thread */
+        struct list_elem donation_thread; /* thread element that is donated */
+        struct lock* lock_waiting;        /* lock that thread is waiting for */
+        struct list threads_donated;      /* list of threads */
+
+        ...
+      };
+
+\end{lstlisting}
+
+Purpose of each new addition:
+\\ \\
+\texttt{base\_priority}: The base priority of the thread, without taking priority donations into account.
+
+
+\subsection{ALGORITHMS}
+
+\subsection*{A2: (8 marks) }
+
+\textit{Briefly describe how you implemented argument parsing. In particular you
+should mention how you arrange for the elements of argv[] to be in the right
+order and how you avoid overflowing the stack page?}
+
+\\ \\TO WRITE
+
+\subsection{RATIONALE}
+
+\subsubsection*{A3: (5 marks) }
+\textit{Why does Pintos implement \texttt{strtok\_r()} but not strtok()?}
+\\ \\TOWRITE
+
+
+\subsubsection*{A4: (5 marks) }
+\textit{In Pintos, the kernel separates commands into a executable name and
+arguments. In Unix-like systems, the shell does this separation. Identify at
+least two advantages of the Unix approach.}
+\\ \\TOWRITE
+
+\section{SYSTEM CALLS}
+
+\subsection{DATA STRUCTURES}
+
+\subsection*{B1: (10 marks) }
+
+\textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’
+member, global or static variable, ‘typedef’, or enumeration. Identify the
+purpose of each in 25 words or less.}
+\\\\
+In thread.h, we added:
+\begin{lstlisting}
+    struct thread
+      {
+        ...
+        /* TASK 1: Advanced scheduling */
+        int cpu_num;
+        int nice;
+        ...
+        };
+\end{lstlisting}
+
+In 'thread.c', we added:
+\begin{lstlisting}
+    static int load_avg;
+\end{lstlisting}
+
+Purpose of each new addition:
+
+\texttt{int cpu\_num}: the recent CPU value of the current thread in fixed point.
+
+\texttt{int nice}: niceness value of the current thread.
+
+\texttt{int load\_avg}: the system's load average value in fixed point.
+
+\subsubsection*{B2: (5 marks) }
+\textit{Describe how you associate file descriptors with open files. Are your
+file descriptors unique within the entire OS or just within a single process? }
+\\ \\ TOWRITE
+
+\subsection{ALGORITHMS}
+
+\subsubsection*{B3: (5 marks) }
+\textit{Describe how your code ensures safe memory access of user provided data
+from within the kernel. }
+\\ \\TOWRITE
+
+\subsubsection*{B4: (5 marks) }
+\textit{Suppose a system call passes the kernel a pointer to a full page (4,096
+bytes) of data that has to be copied from user space. What is the least and the
+greatest possible number of inspections of the page table (e.g. calls to
+\texttt{pagedir\_get\_page())} that might result? What about for a system
+ call that passes a pointer to only 2 bytes of data? How might you improve these
+numbers? }
+\\ \\TOWRITE
+
+\subsubsection*{B5: (8 marks) }
+\textit{Describe your implementation of the "wait" system call and how it interacts
+with process termination for both the parent and child.}
+\\ \\ TOWRITE
+
+\subsubsection*{B6: (5 marks) }
+\textit{Any access to user program memory at a user-specified address can fail due to
+a bad pointer value. Such accesses must cause the process to be terminated.
+System calls are fraught with such accesses, e.g. a "write" system call
+requires reading the system call number from the user stack, then each of the
+call's three arguments, then an arbitrary amount of user memory, and any of
+these can fail at any point. This poses a design and error-handling problem:
+how do you best avoid obscuring the primary function of code in a morass of
+error-handling? Furthermore, when an error is detected, how do you ensure
+that all temporarily allocated resources (locks, buffers, etc.) are freed?
+In a paragraph, describe the strategy or strategies you adopted for managing
+these issues.}
+\\ \\TOWRITE
+
+\subsection{SYNCHRONIZATION}
+
+\subsubsection*{B7: (5 marks) }
+\textit{The "exec" system call returns -1 if loading the new executable fails, so it
+cannot return before the new executable has completed loading. How does your
+code ensure this? How is the load success/failure status passed back to the
+thread that calls "exec"?}
+\\ \\TOWRITE
+
+\subsubsection*{B8: (5 marks) }
+\textit{Consider parent process P with child process C. How do you ensure proper
+synchronization and avoid race conditions when P calls wait(C) before or
+after C exits? How do you ensure that all resources are freed in each case?
+How about when P terminates, without waiting, before or after C exits? Your
+answer must cover all four cases mentioned above and address resource freeing.}
+\\ \\TOWRITE
+
+\subsection{RATIONALE}
+
+\subsubsection*{B9: (5 marks) }
+\textit{Why did you choose to implement safe access of user memory from the
+kernel in the way that you did?}
+\\ \\ TOWRITE
+
+\subsubsection*{B10: (5 marks) }
+\textit{What advantages or disadvantages can you see to your design for file
+descriptors?}
+\\ \\ TOWRITE
+
+\subsubsection*{B11: (2 marks) }
+\textit{The default \texttt{tid\_t} to \texttt{pid\_t} mapping is the identity mapping. Did you
+change this? Why?}
+\\ \\ TOWRITE
+
+
+
+\end{document}

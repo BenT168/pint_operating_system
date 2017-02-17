@@ -230,6 +230,23 @@ thread_create (const char *name, int priority,
   check_max_priority();
   intr_set_level (old_level);
 
+  /* TASK 2 */
+  #ifdef USERPROG
+  t->parent = thread_current ();
+
+  t->wait = false;
+  t->exit = false;
+  list_init(&t->child_procs);
+  list_init(&t->file_descriptors);
+  list_init(&t->pid_to_exit_status);
+  list_init(&t->file_list);
+
+   if (thread_current () != initial_thread) {
+    list_push_back (&thread_current ()->child_procs, &t->child);
+  }
+
+  #endif
+
   return tid;
 }
 
@@ -304,6 +321,19 @@ thread_tid (void)
   return thread_current ()->tid;
 }
 
+/* TASK 2: Returns thread with the tid number given */
+struct thread*
+get_tid_thread(tid_t tid) {
+struct list_elem *e;
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+    e = list_next (e)) {
+    struct thread *t = list_entry (e, struct thread, allelem);
+    if (t->tid == tid)
+      return t;
+    }
+  return NULL;
+}
+
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void
@@ -311,8 +341,24 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
-#ifdef USERPROG
-  process_exit ();
+  #ifdef USERPROG
+
+    struct list_elem *e;
+
+    for (e = list_begin (&thread_current ()->child_procs); e != list_end (&thread_current ()->child_procs);
+      e = list_next (e)) {
+      struct thread *t = list_entry (e, struct thread, child);
+      if (!t->exit) {
+          t->parent = NULL;
+          list_remove (&t->child);
+      }
+ 	  }
+
+    process_exit ();
+
+    if (thread_current ()->parent != NULL && thread_current ()->parent != initial_thread) {
+      list_remove (&thread_current ()->child);
+	  }
 #endif
 
   /* Remove thread from all threads list, set our status to dying,

@@ -3,9 +3,17 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "deviecs/shutdown.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "threads/malloc.h"
+#include "devices/shutdown.h"
 
 static void syscall_handler (struct intr_frame *);
+static void syscall_exit (int );
+static int syscall_wait (pid_t);
+static int syscall_write (int , const void*, unsigned);
+static int syscall_open (const char*);
+
 
 void
 syscall_init (void)
@@ -20,71 +28,82 @@ syscall_handler (struct intr_frame *f UNUSED)
   thread_exit ();
 }
 
-void
-halt (void)
+static void
+syscall_exit (int status)
 {
-  shutdown_power_off ();
+  thread_current()->exit_status = status;
+  printf ("%s: exit(%d)\n", thread_current()->name, status);
+  //too many argument using to function : ?? thread_exit(status);
 }
 
-void
-exit (int status)
-{
-  struct thread *cur = thread_current ();
-  uint32_t *pd;
-
-  printf("%s: exit(%d)\n", cur->name, status);
-  process_exit ();
-}
-
-pid_t
-exec (const char *file)
-{
-
-}
-
-int
-wait (pid_t pid)
-{
-  if (pid == -1)
-  {
-
-  }
-}
-
-/* Verifies that the pointer 'vaddr' is a valid user pointer. If it is, we
-   return true. If it is not, we return false. */
-bool
-verify_user_address (uint32_t *pd, const void *vaddr)
-{
-  /* Asserts that the user pointer is not null; that it is a user address
-  (below PHYS_BASE); and that the page in which it exists is mapped to physical
-  memory. */
-
-  uint32_t *pd = active_pd ();
-  return vaddr != NULL &&
-  is_user_vaddr (vaddr) && pagedir_get_page (pd, vaddr) != NULL;
-}
-
-/* Reads a byte at user virtual address UADDR.
-UADDR must be below PHYS_BASE.
-Returns the byte value if successful, -1 if a segfault
-occurred. */
 static int
-get_user (const uint8_t *uaddr)
+syscall_wait (pid_t pid)
 {
-  int result;
-  asm ("movl $1f, %0; movzbl %1, %0; 1:"
-  : "=&a" (result) : "m" (*uaddr));
-return result;
+  return process_wait(pid);
 }
-/* Writes BYTE to user address UDST.
-UDST must be below PHYS_BASE.
-Returns true if successful, false if a segfault occurred. */
-static bool
-put_user (uint8_t *udst, uint8_t byte)
+
+
+static int
+syscall_write (int fd, const void *buffer, unsigned size)
 {
-int error_code;
-asm ("movl $1f, %0; movb %b2, %1; 1:"
-: "=&a" (error_code), "=m" (*udst) : "q" (byte));
-return error_code != -1;
+  if (fd == STDOUT_FILENO) {
+    putbuf(buffer, size);
+    return size;
+  }
+  lock_acquire(&filesys_lock);
+  struct file *file = fd_get_file(fd);
+  if (file != NULL) {
+    int bytes = file_write(file, buffer, size);
+	lock_release(&filesys_lock);
+	return bytes;
+  }
+  lock_release(&filesys_lock);
+  return -1;
+}
+
+static int
+syscall_open (const char *file)
+{
+  lock_acquire(&filesys_lock);
+  struct file *f = filesys_open(file);
+  if (f != NULL) {
+    int fd = fd_add_file(f);
+    lock_release(&filesys_lock);
+	return fd;
+  }
+  lock_release(&filesys_lock);
+  return -1;
+}
+
+int fd_add_file (struct file *file)
+{
+  struct fd_file *fd_file = malloc(sizeof(struct fd_file));
+  fd_file->file = file;
+  fd_file->fd = thread_current()->fd;
+  thread_current()->fd++;
+  list_push_back(&thread_current()->file_list, &fd_file->elem);
+  return fd_file->fd;
+}
+
+struct file* fd_get_file (int fd)
+{
+  struct thread *t = thread_current();
+  struct list_elem *e;
+
+  for (e = list_begin (&t->file_list); e != list_end (&t->file_list);
+       e = list_next (e)) {
+    struct fd_file *fd_file = list_entry (e, struct fd_file, elem);
+      if (fd == fd_file->fd) {
+	      return fd_file->file;
+	  }
+   }
+   return NULL;
+}
+
+void halt (void) {
+  shutdown_power_off();
+}
+
+pid_t exec (const char *cmd_line) {
+
 }

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -17,6 +18,7 @@ enum thread_status
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
+
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -107,6 +109,24 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct file *file;
+    bool child_load_success;
+    struct semaphore load_sema;
+    struct semaphore alive_sema;
+
+    struct thread *parent;
+
+    struct list child_procs;
+    struct list file_descriptors;
+    struct list pid_to_exit_status;
+    struct list_elem child;
+
+
+    bool wait;                          /* Checks if thread is in proces_wait */
+    bool exit;                          /* Checks if thread has exited */
+    int exit_status;                    /* exit status of thread */
+	  struct list file_list;              /* file list used for file system calls */
+	  int fd;
 #endif
 
     /* TASK 0 */
@@ -123,7 +143,7 @@ struct thread
     int cpu_num;                        /* Time spent in the CPU recently */
     int nice;                           /* Index of greediness for CPU */
 
-    /* Owned by thread.c. */
+	/* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
 
@@ -181,6 +201,7 @@ void priority_thread_mlfqs(struct thread* t, void *aux UNUSED);
 void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED);
 void load_avg_thread_mlfqs (void);
 
-
+/* TASK 2 */
+struct thread* get_tid_thread(tid_t tid);
 
 #endif /* threads/thread.h */
