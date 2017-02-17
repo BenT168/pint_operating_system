@@ -175,7 +175,7 @@ process_wait (tid_t child_tid UNUSED)
     return -1;
   }
 
-  if(child->parent != cur || cur->waiting_on_process != child) {
+  if(child->parent != cur || /*cur->waiting_on_process != child*/ child->wait) {
     return -1;
   }
 
