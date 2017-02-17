@@ -28,23 +28,33 @@ syscall_handler (struct intr_frame *f UNUSED)
   thread_exit ();
 }
 
+/* TASK 2: Terminates the current user program, sending its exit status
+   to the kernel. If the process's parent waits for it, this is the status
+   that will be returned. Conventionally, a status of 0 indicates success
+   and nonzero values indicate errors. */
 static void
-syscall_exit (int status)
+exit (int status)
 {
   thread_current()->exit_status = status;
   printf ("%s: exit(%d)\n", thread_current()->name, status);
   //too many argument using to function : ?? thread_exit(status);
 }
 
+/* TASK 2: Waits for a child process pid and retrieves the child's exit status.
+   If pid is still alive, waits until it terminates. Then, returns the status
+   that pid passed to exit. If pid did not call exit(), but was terminated
+   by the kernel (e.g. killed due to an exception), wait(pid) returns -1. */
 static int
-syscall_wait (pid_t pid)
+wait (pid_t pid)
 {
   return process_wait(pid);
 }
 
-
+/* TASK 2: Writes size bytes from buffer to the open file fd.
+   Returns the number of bytes actually written, which may be less than size
+   if some bytes could not be written. */
 static int
-syscall_write (int fd, const void *buffer, unsigned size)
+write (int fd, const void *buffer, unsigned size)
 {
   if (fd == STDOUT_FILENO) {
     putbuf(buffer, size);
@@ -61,8 +71,11 @@ syscall_write (int fd, const void *buffer, unsigned size)
   return -1;
 }
 
+/* TASK 2: Opens the file called file.
+   Returns a nonnegative integer handle called a "file descriptor" (fd),
+   or -1 if the file could not be opened. */
 static int
-syscall_open (const char *file)
+open (const char *file)
 {
   lock_acquire(&filesys_lock);
   struct file *f = filesys_open(file);
@@ -100,10 +113,15 @@ struct file* fd_get_file (int fd)
    return NULL;
 }
 
+/* TASK 2: Terminates Pintos by calling shutdown_power_off() */
 void halt (void) {
   shutdown_power_off();
 }
 
+/* TASK 2: Runs the executable whose name is given in cmd line,
+   passing any given arguments, and returns the new process's program id (pid).
+   Returns pid -1, which otherwise should not be a valid pid,
+   if the program cannot load or run for any reason. */
 pid_t exec (const char *cmd_line) {
 
 }
