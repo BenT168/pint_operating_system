@@ -3,6 +3,9 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "threads/malloc.h"
 
 static void syscall_handler (struct intr_frame *);
 static void syscall_exit (int );
@@ -30,7 +33,7 @@ syscall_exit (int status)
 {
   thread_current()->exit_status = status;
   printf ("%s: exit(%d)\n", thread_current()->name, status);
-  thread_exit (status);
+  //?? thread_exit (status);
 }
 
 static int
@@ -91,7 +94,7 @@ struct file* fd_get_file (int fd)
        e = list_next (e)) {
     struct fd_file *fd_file = list_entry (e, struct fd_file, elem);
       if (fd == fd_file->fd) {
-	      return fd_file>file;
+	      return fd_file->file;
 	  }
    }
    return NULL;

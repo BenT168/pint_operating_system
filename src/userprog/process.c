@@ -15,7 +15,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
-#include "thread/malloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
@@ -108,7 +108,8 @@ start_process (void *file_name_)
     thread_exit ();
 
   /* TASK 2 : Push the argument onto the stack */
-  for(int i < size - 1; i >= 0; --i) {
+  int i;
+  for(i < size - 1; i >= 0; --i) {
     char *str = *(args + i);
     size_t len = strlen(str) + 1;
     if_.esp -= len;

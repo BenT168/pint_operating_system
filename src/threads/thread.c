@@ -239,7 +239,7 @@ thread_create (const char *name, int priority,
   list_init(&t->child_procs);
   list_init(&t->file_descriptors);
   list_init(&t->pid_to_exit_status);
-  list_int(&t->file_list);
+  list_init(&t->file_list);
 
    if (thread_current () != initial_thread) {
     list_push_back (&thread_current ()->child_procs, &t->child);
@@ -326,7 +326,7 @@ struct thread*
 get_tid_thread(tid_t tid) {
 struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list);
-    elem= list_next (e)) {
+    e = list_next (e)) {
     struct thread *t = list_entry (e, struct thread, allelem);
     if (t->tid == tid)
       return t;
@@ -342,22 +342,22 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
   #ifdef USERPROG
-
+/*
     struct list_elem *e;
 
     for (e = list_begin (&thread_current ()->child_procs); e != list_end (&thread_current ()->child_procs);
       e = list_next (e)) {
-      struct thread *t = list_entry (e, struct thread, &thread_current->child);
+      struct thread *t = list_entry (e, struct thread, thread_current->child);
       if (!t->exit) {
           t->parent = NULL;
           list_remove (&t->child);
       }
-	}
+	} */
     process_exit ();
-
+/*
     if (thread_current ()->parent != NULL && thread_current ()->parent != initial_thread) {
       list_remove (&thread_current ()->child);
-	}
+	} */
 #endif
 
   /* Remove thread from all threads list, set our status to dying,

@@ -7,12 +7,8 @@
 #include "lib/user/syscall.h"
 
 void syscall_init (void);
-void syscall_handler (struct intr_frame *f UNUSED);
-void syscall_exit (int exit);
-int syscall_wait (pid_t pid);
-int syscall_write (int fd , const void* buffer, unsigned size);
-int syscall_open (const char* file);
 int fd_add_file (struct file *file);
+
 struct file* fd_get_file (int fd);
 
 struct lock filesys_lock;

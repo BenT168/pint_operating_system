@@ -4,7 +4,6 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "userprog/process.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -111,8 +110,8 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct file *file;
     bool child_load_success;
-    struct semaphore load_sema;
-    struct semaphore alive_sema;
+  //  struct semaphore load_sema;
+  //  struct semaphore alive_sema;
 
     struct thread *parent;
 
