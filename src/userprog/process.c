@@ -175,16 +175,16 @@ process_wait (tid_t child_tid UNUSED)
     return -1;
   }
 
-  if(child->parent != cur || cur->waiting_on_process != child) {
+  if (child->parent != cur || child->successful_wait_by_parent) {
     return -1;
   }
 
-  while(!child->exit) {
-	  //wait
+  while(!child->exited) {
+	  // wait
   }
 
   int exit_status = child->exit_status;
-  child->wait = true;
+  child->successful_wait_by_parent = true;
 
   return exit_status;
 }

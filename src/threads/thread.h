@@ -128,7 +128,12 @@ struct thread
                                          a processes (single-threaded) can be
                                          both child and parent processes. */
 
-    bool wait;                        /* Checks if thread is in proces_wait */
+    /* A thread can only have one parent. So 
+    we use this member to check whether this thread's parent has successfully
+    waited on it. If this is true, then the thread has exited and the thread
+    TID of this thread (but not the thread itself) must be dead. In this state,
+    the thread can no longer run. */
+    bool successful_wait_by_parent;
     bool exit;                        /* Checks if thread has exited */
     int exit_status;                  /* exit status of thread */
 	  struct list file_list;            /* File list used for file system calls*/
