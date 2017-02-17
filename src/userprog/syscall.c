@@ -5,15 +5,20 @@
 #include "threads/thread.h"
 
 static void syscall_handler (struct intr_frame *);
+static void syscall_exit (int );
+static int syscall_wait (pid_t);
+static int syscall_write (int , const void*, unsigned);
+static int syscall_open (const char*);
+
 
 void
-syscall_init (void) 
+syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f UNUSED)
 {
   printf ("system call!\n");
   thread_exit ();
@@ -23,8 +28,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 static void
 syscall_exit (int status)
 {
-  thread_current()->proc.exit_status = status;
-  
+  thread_current()->exit_status = status;
+  printf ("%s: exit(%d)\n", thread_current()->name, status);
   thread_exit (status);
 }
 
@@ -35,7 +40,7 @@ syscall_wait (pid_t pid)
 }
 
 
-static int 
+static int
 syscall_write (int fd, const void *buffer, unsigned size)
 {
   if (fd == STDOUT_FILENO) {
@@ -53,7 +58,7 @@ syscall_write (int fd, const void *buffer, unsigned size)
   return -1;
 }
 
-static int 
+static int
 syscall_open (const char *file)
 {
   lock_acquire(&filesys_lock);
@@ -61,7 +66,7 @@ syscall_open (const char *file)
   if (f != NULL) {
     int fd = fd_add_file(f);
     lock_release(&filesys_lock);
-	return fd; 
+	return fd;
   }
   lock_release(&filesys_lock);
   return -1;
@@ -91,4 +96,3 @@ struct file* fd_get_file (int fd)
    }
    return NULL;
 }
-

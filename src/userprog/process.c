@@ -1,4 +1,4 @@
-
+#include "userprog/process.h"
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
@@ -29,24 +29,24 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name)
-{
-  char *fn_copy;
-  tid_t tid;
+ process_execute (const char *file_name)
+ {
+   char *fn_copy;
+   tid_t tid;
 
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+   /* Make a copy of FILE_NAME.
+      Otherwise there's a race between the caller and load(). */
+   fn_copy = palloc_get_page (0);
+   if (fn_copy == NULL)
+     return TID_ERROR;
+   strlcpy (fn_copy, file_name, PGSIZE);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
-  return tid;
-}
+   /* Create a new thread to execute FILE_NAME. */
+   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+   if (tid == TID_ERROR)
+     palloc_free_page (fn_copy);
+   return tid;
+ }
 
 /* TASK 2 : Parsing arguments from filename into a string,
    returns the size  of argv or -1 if failure. */
@@ -75,8 +75,8 @@ static void
 start_process (void *file_name_)
 {
   /* Adds the new proc to childrens of the current proc */
-  list_push_back (&thread_current ()->proc.parent->proc.child_procs,
-                  &thread_current ()->proc.elem);
+  list_push_back (&thread_current ()->parent->child_procs,
+                  &thread_current ()->elem);
 
   char *file_name = file_name_;
   struct intr_frame if_;
@@ -98,8 +98,8 @@ start_process (void *file_name_)
     thread_exit ();
 
   file_name = *args;
-  strlcpy(thread_current()->proc.name, file_name, 15);
-  success = thread_current()->proc.parent->proc.child_load_success
+  strlcpy(thread_current()->name, file_name, 15);
+  success = thread_current()->parent->child_load_success
           = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
@@ -162,23 +162,23 @@ and jump to it. */
 int
 process_wait (tid_t child_tid UNUSED)
 {
-  struct thread* child; 
+  struct thread* child;
   child = get_tid_thread(child_tid);
-  
+
   if (child == NULL) {
     return -1;
   }
 
-  if(child->proc->parent != thread_current() || child->proc.wait) {
+  if(child->parent != thread_current() || child->wait) {
     return -1;
   }
-  
-  while(!child->proc.exit) {
+
+  while(!child->exit) {
 	  //wait
   }
-  
-  int exit_status = child->proc.exit_status;
-  child->proc.wait = true;
+
+  int exit_status = child->exit_status;
+  child->wait = true;
 
   return exit_status;
 }

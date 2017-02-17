@@ -109,9 +109,24 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct process proc;		        /* Thread process */  
-	struct list file_list;              /* file list used for file system calls */
-	int fd;
+    struct file *file;
+    bool child_load_success;
+    struct semaphore load_sema;
+    struct semaphore alive_sema;
+
+    struct thread *parent;
+
+    struct list child_procs;
+    struct list file_descriptors;
+    struct list pid_to_exit_status;
+    struct list_elem child;
+
+
+    bool wait;                          /* Checks if thread is in proces_wait */
+    bool exit;                          /* Checks if thread has exited */
+    int exit_status;                    /* exit status of thread */
+	  struct list file_list;              /* file list used for file system calls */
+	  int fd;
 #endif
 
     /* TASK 0 */
@@ -127,7 +142,7 @@ struct thread
     /* TASK 1: Advanced scheduling */
     int cpu_num;                        /* Time spent in the CPU recently */
     int nice;                           /* Index of greediness for CPU */
-    
+
 	/* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
