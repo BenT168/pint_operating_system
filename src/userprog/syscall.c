@@ -36,9 +36,9 @@ int fd_add_file (struct file *file)
 {
   struct fd_file *fd_desc = malloc(sizeof(struct fd_file));
   fd_desc->file = file;
-  fd_desc->fd = fd_id;
+  fd_desc->fd = fd_id++;
   list_push_back(&thread_current()->file_list, &fd_desc->elem);
-  return fd_id++;
+  return fd_id;
 }
 
 /* Tasks 2 : TOCOMMENT */
@@ -260,7 +260,8 @@ wait (pid_t pid)
   return process_wait(thread_id);
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* Tasks 2 : Creates a new file called file initially initial size bytes in
+   size. Returns true if successful, false otherwise. */
 bool
 create (const char *file, unsigned initial_size) {
   check_memory_access (file);
@@ -268,7 +269,8 @@ create (const char *file, unsigned initial_size) {
   return check_create;
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* Tasks 2 : Deletes the file called file. Returns true if successful, false
+   otherwise. */
 bool
 remove (const char *file) {
   check_memory_access (file);
@@ -282,26 +284,36 @@ remove (const char *file) {
 int
 open (const char *file)
 {
+  if (!file) return -1;
+
   check_memory_access (file);
   struct file *f = filesys_open(file);
+  /* Create fd_file struct to be added to thread's file_descriptors */
   struct fd_file *fd_f = malloc(sizeof(struct fd_file));
 
   if (!f) return -1;
+  if (fd_f == NULL) {
+    file_close(f);
+    return -1;
+  }
 
   fd_f->file = f;
-  fd_f->fd = fd_id;
+  fd_f->fd = fd_id++;
   list_push_back(&thread_current()->file_descriptors, &fd_f->elem);
-  return fd_id++;
+  return fd_id;
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* Tasks 2 : Returns the size, in bytes, of the file open as fd.
+ */
 int
 filesize (int fd) {
   struct file* file = fd_get_file(fd);
   return file_length(file);
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* Tasks 2 : Reads size bytes from the file open as fd into buffer. Returns the
+   number of bytes actually read (0 at end of file), or -1 if the file could not
+   be read (due to a condition other than end of file). */
 int
 read (int fd, void *buffer, unsigned size) {
   check_memory_access(buffer);
@@ -350,21 +362,26 @@ write (int fd, const void *buffer, unsigned size)
   return -1;
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* Tasks 2 : Changes the next byte to be read or written in open file fd to
+   position, expressed in bytes from the beginning of the file. */
 void
 seek (int fd, unsigned position) {
   struct file* file = fd_get_file(fd);
   return file_seek(file, position);
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* Tasks 2 : Returns the position of the next byte to be read or written in open
+   file fd, expressed in bytes from the beginning of the file. */
 unsigned
 tell (int fd) {
   struct file* file = fd_get_file(fd);
   return file_tell(file);
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* Tasks 2 : Closes file descriptor fd. Exiting or terminating a process
+   implicitly closes all its open file descriptors, as if by calling this
+   function for each one.
+ */
 void
 close (int fd) {
   struct file* file = fd_get_file(fd);
