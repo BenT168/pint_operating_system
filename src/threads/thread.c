@@ -313,13 +313,14 @@ thread_tid (void)
 /* TASK 2: Returns thread with the tid number given */
 struct thread*
 get_tid_thread(tid_t tid) {
-struct list_elem *e;
+  struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list);
     e = list_next (e)) {
     struct thread *t = list_entry (e, struct thread, allelem);
-    if (t->tid == tid)
+    if (t->tid == tid) {
       return t;
     }
+  }
   return NULL;
 }
 

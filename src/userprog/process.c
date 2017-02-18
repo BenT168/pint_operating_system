@@ -174,15 +174,12 @@ process_wait (tid_t child_tid)
   /* TASK 2 : TOCOMMENT */
   if (child) {
     sema_down(&child->alive_sema);
-  } else {
-    /* Child thread terminated by kernel, so return -1.*/
-    return -1;
   }
 
   /* TASK 2 : TOCOMMENT */
-  struct list_elem *e = list_begin (&thread_current ()-> pid_to_exit_status);
+  struct list_elem *e = list_begin (&thread_current ()->pid_to_exit_status);
 
-  for (; e != list_end (&thread_current () -> pid_to_exit_status); e = list_next(e) ){
+  for (; e != list_end (&thread_current ()->pid_to_exit_status); e = list_next(e) ){
     struct pid_exit_status *pes = list_entry (e, struct pid_exit_status, elem);
 
     if(pes->pid == (pid_t) child_tid) {

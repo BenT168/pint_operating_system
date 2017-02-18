@@ -206,6 +206,9 @@ exec (const char *cmd_line)
 int
 wait (pid_t pid)
 {
+  if (pid == -1) {
+    return -1;
+  }
   tid_t thread_id = (tid_t) pid;
   return process_wait(thread_id);
 }
