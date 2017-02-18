@@ -75,6 +75,10 @@ static int parse_args (char **argv, char *file_name) {
 static void
 start_process (void *file_name_)
 {
+  /* Adds the new proc to childrens of the current proc */
+  list_push_back (&thread_current ()->parent->child_procs,
+                  &thread_current ()->child);
+
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;

@@ -230,22 +230,9 @@ thread_create (const char *name, int priority,
   check_max_priority();
   intr_set_level (old_level);
 
-  /* TASK 2: Initialize all the struct and list for process running */
   #ifdef USERPROG
   t->pid = (pid_t) tid;
   t->parent = thread_current ();
-
-  t->file = NULL;
-  t->child_load_success = false;
-  sema_init (&t->load_sema, 0);
-  sema_init (&t->alive_sema, 0);
-  list_init (&t->child_procs);
-  list_init (&t->file_descriptors);
-  list_init (&t->pid_to_exit_status);
-
-  /* Adds the new proc to childrens of the current proc */
-  list_push_back (&thread_current ()->parent->child_procs,
-                    &thread_current ()->child);
   #endif
 
   return tid;
@@ -568,6 +555,17 @@ init_thread (struct thread *t, const char *name, int priority)
       t->lock_waiting = NULL;
       list_init(&t->threads_donated);
     }
+
+  /* TASK 2: Initialize all the struct and list for process running */
+  #ifdef USERPROG
+      t->file = NULL;
+      t->child_load_success = false;
+      sema_init (&t->load_sema, 0);
+      sema_init (&t->alive_sema, 0);
+      list_init (&t->child_procs);
+      list_init (&t->file_descriptors);
+      list_init (&t->pid_to_exit_status);
+  #endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
