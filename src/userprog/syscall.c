@@ -14,6 +14,8 @@
 
 static void syscall_handler (struct intr_frame *);
 
+static int fd_id = 2;
+
 void
 syscall_init (void)
 {
@@ -32,7 +34,6 @@ check_memory_access(const void *ptr) {
 /* Tasks 2 : TOCOMMENT */
 int fd_add_file (struct file *file)
 {
-  static int fd_id = 2;
   struct fd_file *fd_desc = malloc(sizeof(struct fd_file));
   fd_desc->file = file;
   fd_desc->fd = fd_id;
@@ -182,9 +183,7 @@ exec (const char *cmd_line)
   tid_t thread_id = process_execute(cmd_line);
   pid_t process_id = (pid_t) thread_id;
 
-  if (thread_id == TID_ERROR) {
-    return -1;
-  }
+  if (thread_id == TID_ERROR) return -1;
 
   struct thread* proc_thread = get_tid_thread(thread_id);
 
@@ -192,9 +191,7 @@ exec (const char *cmd_line)
     sema_down(&proc_thread->load_sema);
   }
 
-  if (!thread_current ()->child_load_success) {
-    return -1;
-  }
+  if (!thread_current ()->child_load_success) return -1;
 
   return process_id;
 }
@@ -206,9 +203,7 @@ exec (const char *cmd_line)
 int
 wait (pid_t pid)
 {
-  if (pid == -1) {
-    return -1;
-  }
+  if (pid == -1) return -1;
   tid_t thread_id = (tid_t) pid;
   return process_wait(thread_id);
 }
@@ -237,11 +232,14 @@ open (const char *file)
 {
   check_memory_access (file);
   struct file *f = filesys_open(file);
-  if (f != NULL) {
-    int fd = fd_add_file(f);
-	  return fd;
-  }
-  return -1;
+  struct fd_file *fd_f = malloc(sizeof(struct fd_file));
+
+  if (!f) return -1;
+
+  fd_f->file = f;
+  fd_f->fd = fd_id;
+  list_push_back(&thread_current()->file_descriptors, &fd_f->elem);
+  return fd_id++;
 }
 
 /* Tasks 2 : TOCOMMENT */
