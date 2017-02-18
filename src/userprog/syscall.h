@@ -17,7 +17,7 @@ struct fd_file {
 
 /* Tasks 2 and later. */
 int fd_add_file (struct file *file);
-struct file* fd_get_file (int fd);
+struct fd_file* fd_get_file (int fd);
 void halt (void);
 void exit (int status);
 pid_t exec (const char *file);

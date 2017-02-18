@@ -42,7 +42,7 @@ int fd_add_file (struct file *file)
 }
 
 /* Tasks 2 : TOCOMMENT */
-struct file* fd_get_file (int fd)
+struct fd_file* fd_get_file (int fd)
 {
   struct thread *t = thread_current();
   struct list_elem *e;
@@ -51,11 +51,10 @@ struct file* fd_get_file (int fd)
        e = list_next (e)) {
     struct fd_file *fd_file = list_entry (e, struct fd_file, elem);
       if (fd == fd_file->fd) {
-	      return fd_file->file;
+	      return fd_file;
 	  }
    }
    exit(-1);
-   return NULL;
 }
 
 /* Tasks 2 : TOCOMMENT */
@@ -307,8 +306,8 @@ open (const char *file)
  */
 int
 filesize (int fd) {
-  struct file* file = fd_get_file(fd);
-  return file_length(file);
+  struct fd_file* fd_file = fd_get_file(fd);
+  return file_length(fd_file->file);
 }
 
 /* Tasks 2 : Reads size bytes from the file open as fd into buffer. Returns the
@@ -318,25 +317,24 @@ int
 read (int fd, void *buffer, unsigned size) {
   check_memory_access(buffer);
   char *buf = buffer;
-
+  int num_bytes_r;
   switch (fd) {
     case 0 :
       {
-        unsigned i;
-        for(i = 0; i < size; i++){
-          *(buf + i) = input_getc ();
+        for(unsigned i = 0; i < size; ++i){
+          *(uint8_t *)(buf + i) = input_getc ();
         }
-        return size;
+        num_bytes_r = size;
       }
       break;
     case 1 :
-      exit(-1);
+      num_bytes_r = -1;
       break;
     default :
-      return file_read(fd_get_file(fd), buffer, size);
+      num_bytes_r = file_read(fd_get_file(fd)->file, buffer, size);
       break;
   }
-  return -1;
+  return num_bytes_r;
 }
 
 /* TASK 2: Writes size bytes from buffer to the open file fd.
@@ -346,36 +344,40 @@ int
 write (int fd, const void *buffer, unsigned size)
 {
   check_memory_access (buffer);
-
+  int num_bytes_w;
   switch (fd) {
     case 0 :
-      exit(-1);
+      num_bytes_w = -1;
       break;
     case 1 :
+      while (size > 200){
+        putbuf (buffer, size);
+        size = size - 200;
+      }
       putbuf (buffer, size);
-      return size;
+      num_bytes_w = size;
       break;
     default :
-      return file_write(fd_get_file(fd), buffer, size);
+      num_bytes_w = file_write(fd_get_file(fd)->file, buffer, size);
       break;
   }
-  return -1;
+  return num_bytes_w;
 }
 
 /* Tasks 2 : Changes the next byte to be read or written in open file fd to
    position, expressed in bytes from the beginning of the file. */
 void
 seek (int fd, unsigned position) {
-  struct file* file = fd_get_file(fd);
-  return file_seek(file, position);
+  struct fd_file* fd_file = fd_get_file(fd);
+  return file_seek(fd_file->file, position);
 }
 
 /* Tasks 2 : Returns the position of the next byte to be read or written in open
    file fd, expressed in bytes from the beginning of the file. */
 unsigned
 tell (int fd) {
-  struct file* file = fd_get_file(fd);
-  return file_tell(file);
+  struct fd_file* fd_file = fd_get_file(fd);
+  return file_tell(fd_file->file);
 }
 
 /* Tasks 2 : Closes file descriptor fd. Exiting or terminating a process
@@ -384,6 +386,8 @@ tell (int fd) {
  */
 void
 close (int fd) {
-  struct file* file = fd_get_file(fd);
-  file_close(file);
+  struct fd_file* fd_file = fd_get_file(fd);
+  list_remove(&fd_file->elem);
+  file_close(fd_file->file);
+  free(fd_file);
 }
