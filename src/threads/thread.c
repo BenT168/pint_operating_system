@@ -234,7 +234,7 @@ thread_create (const char *name, int priority,
   #ifdef USERPROG
   t->parent = thread_current ();
 
-  t->wait = false;
+  t->successful_wait_by_parent = false;
   t->exit = false;
   list_init(&t->child_procs);
   list_init(&t->file_descriptors);
@@ -243,6 +243,13 @@ thread_create (const char *name, int priority,
 
    if (thread_current () != initial_thread) {
     list_push_back (&thread_current ()->child_procs, &t->child);
+  }
+
+  /* Adds the new proc to childrens of the current proc */
+  if (thread_current ()->parent != NULL)
+  {
+    list_push_back (&thread_current ()->parent->child_procs,
+                    &thread_current ()->elem);
   }
 
   #endif

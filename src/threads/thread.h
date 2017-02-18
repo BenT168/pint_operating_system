@@ -112,7 +112,6 @@ struct thread
 
     /* TASK 2 */
     struct file *file;
-    bool child_load_success;
     struct semaphore load_sema;
     struct semaphore alive_sema;
 
@@ -128,7 +127,7 @@ struct thread
                                          a processes (single-threaded) can be
                                          both child and parent processes. */
 
-    /* A thread can only have one parent. So 
+    /* A thread can only have one parent. So
     we use this member to check whether this thread's parent has successfully
     waited on it. If this is true, then the thread has exited and the thread
     TID of this thread (but not the thread itself) must be dead. In this state,

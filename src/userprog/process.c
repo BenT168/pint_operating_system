@@ -24,50 +24,117 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static int setup_process_stack (void **esp_addr, char* args);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
- process_execute (const char *file_name)
- {
-   char *fn_copy;
-   tid_t tid;
+process_execute (const char *file_name)
+{
+ char *fn_copy;
+ tid_t tid;
 
-   /* Make a copy of FILE_NAME.
-      Otherwise there's a race between the caller and load(). */
-   fn_copy = palloc_get_page (0);
-   if (fn_copy == NULL)
-     return TID_ERROR;
-   strlcpy (fn_copy, file_name, PGSIZE);
+ /* Make a copy of FILE_NAME.
+    Otherwise there's a race between the caller and load(). */
+ fn_copy = palloc_get_page (0);
+ if (fn_copy == NULL)
+   return TID_ERROR;
+ strlcpy (fn_copy, file_name, PGSIZE);
 
-   /* Create a new thread to execute FILE_NAME. */
-   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-   if (tid == TID_ERROR)
-     palloc_free_page (fn_copy);
-   return tid;
- }
+ /* Create a new thread to execute FILE_NAME. */
+ tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+ if (tid == TID_ERROR)
+   palloc_free_page (fn_copy);
+ return tid;
+}
 
-/* TASK 2 : Parsing arguments from filename into a string,
-   returns the size  of argv or -1 if failure. */
+/* Sets up the process stack, returning if the stack is successfully setup and
+   0 otherwise.*/
+static int
+setup_process_stack (void **esp_addr, char* args)
+{
+  int argc;
+  void *stack_pointer;
+  char *save_ptr;
+  char *token;
 
-static int parse_args (char **argv, char *file_name) {
-  char *saveptr;
-  char *arg = strtok_r (file_name, " ", &saveptr);
-  int index = 0;
-  int alloc_byte = 0;
-  while (arg != NULL) {
-    int len = strlen(arg);
-    if (alloc_byte + len > PGSIZE)
-      return -1;
+  argc = 0;
+  stack_pointer = *esp_addr;
 
-    *(argv + index) = arg;
-    alloc_byte += len;
-    arg = strtok_r (NULL, " ", &saveptr);
-    ++index;
+  /* Tokenise command-line arguments and push each argument onto the stack.*/
+  for (token = strtok_r (args, " ", &save_ptr); token != NULL;
+       token = strtok_r (NULL, " ", &save_ptr))
+  {
+    size_t token_length = strlen (token) + 1;
+
+    /* Stack grows downwards but fills upwards, so we must make space before
+       pushing data onto the stack. */
+    stack_pointer = (void *) (((char *) stack_pointer) - token_length);
+    strlcpy ((char*) stack_pointer, token, token_length);
+    argc++;
+
+    /* Enforce limit on number of arguments. */
+    if (PHYS_BASE - stack_pointer > MAX_ARGS)
+      return 0;
   }
-  return index;
+
+  /* Set argument pointer for later use. */
+  char *arg_pointer = (char *) stack_pointer;
+
+  /* Perform word-algnment. In other words, round stack pointer down to a
+     multiple of 4. */
+  stack_pointer = (void *) (((intptr_t) stack_pointer) & 0xfffffffc);
+
+  /* Push null sentinel. */
+  stack_pointer = ((char **) stack_pointer) - 1;
+  *((char *) stack_pointer) = '\0';
+
+  /* Push addresses to arguments. */
+
+  /* First, make sufficient space for stack pointer to push addresses to
+     arguments in reverse order. */
+  stack_pointer = ((char **) stack_pointer) - argc;
+
+  // At this point, 'arg_pointer - 1 == '\0'' if no word-algnment of the stack
+  // pointer took place. We increment 'arg_pointer' in order to prevent this
+  // breaking the code in the while loop below.
+  arg_pointer++;
+
+  int args_pushed = 0;
+
+  while (args_pushed < argc) {
+    // While we have not yet traversed an entire string.
+    while (arg_pointer - 1 != '\0') {
+      arg_pointer++;
+    }
+    // At this point 'arg_pointer' is pointing to the start of a new argument,
+    // or the start of the data just above the last argument.
+    *((char **) stack_pointer) = arg_pointer;
+    stack_pointer = ((char **) stack_pointer) + 1;
+    args_pushed++;
+    // To avoid inner while condition being true on next loop.
+    arg_pointer++;
+  }
+
+  /* Push 'argv' */
+  stack_pointer = ((char **) stack_pointer) - argc;
+  char** argv_pointer = stack_pointer;
+  stack_pointer = ((char **) stack_pointer) - 1;
+  *((char ***) stack_pointer) = argv_pointer;
+
+  /* Push 'argc' */
+  stack_pointer = ((int *) stack_pointer) - 1;
+  *((int *) stack_pointer) = argc;
+
+  /* Push dummy return address (null sentinel) */
+  stack_pointer = ((void **) stack_pointer) - 1;
+  *((void **) stack_pointer) = 0;
+
+  *esp_addr = stack_pointer;
+
+  return 1;
 }
 
 /* A thread function that loads a user process and starts it
@@ -75,13 +142,13 @@ static int parse_args (char **argv, char *file_name) {
 static void
 start_process (void *file_name_)
 {
-  /* Adds the new proc to childrens of the current proc */
-  list_push_back (&thread_current ()->parent->child_procs,
-                  &thread_current ()->elem);
-
-  char *file_name = file_name_;
+  /* 'file_name_with_args' denotes a pointer to a series of space-separated
+     strings, the first of which is the actual file name. */
+  char *file_name_with_args = file_name_;
+  char *args;
+  char *save_ptr;
   struct intr_frame if_;
-  bool success;
+  bool elf_load_success;
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -90,57 +157,24 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
 
   /* TASK 2 : Initialize and set up the stack */
-  char * args[MAX_ARGS];
-  char * argv[MAX_ARGS];
 
-  int size = parse_args(args, file_name);
+  /* Extract file name and load ELF executable. */
+  args = strtok_r (file_name_with_args, " ", &save_ptr);
+  elf_load_success = load (file_name_with_args, &if_.eip, &if_.esp);
 
-  if (size == -1)
-    thread_exit ();
-
-  file_name = *args;
-  strlcpy(thread_current()->name, file_name, 15);
-  success = thread_current()->parent->child_load_success
-          = load (file_name, &if_.eip, &if_.esp);
-
-  /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success)
-    thread_exit ();
-
-  /* TASK 2 : Push the argument onto the stack */
-  int i;
-  for(i = size - 1; i >= 0; --i) {
-    char *str = *(args + i);
-    size_t len = strlen(str) + 1;
-    if_.esp -= len;
-    strlcpy(if_.esp, str, len);
-    *(argv + i) = if_.esp;
+  if (elf_load_success)
+  {
+    /* If ELF executable loads successfully, setup the process' stack. */
+    setup_process_stack (&if_.esp, args);
   }
-
-  palloc_free_page(file_name);
-
-  /* Word-align */
-  if_.esp -= ((unsigned) if_.esp) % 4;
-  if_.esp -= sizeof(char*);
-  *((char**) if_.esp) = NULL;
-
-  /* TASK 2 : Push pointers to the argument */
-  for (i = size - 1; i >= 0; --i) {
-   if_.esp -= sizeof(char*);
-   *((char**) if_.esp) = *(argv + i);
+  else
+  {
+    palloc_free_page (file_name_with_args);
+    thread_exit ();
   }
+  palloc_free_page (file_name_with_args);
 
-  /* TASK 2 : Push a pointer to the first pointer */
-  if_.esp -= sizeof(char**);
-  *((void**) if_.esp) = if_.esp + sizeof(char**);
-
-  /* TASK 2 : Push the number of argument */
-  if_.esp -= sizeof(int);
-  *((int*) if_.esp) = size;
-
-  /* TASK 2 : Push a fake return address (0) */
-  if_.esp -= sizeof(void (*) (void));
+  /* END TASK 2 */
 
   /* Start the user process by simulating a return from an
 interrupt, implemented by intr_exit (in
@@ -175,15 +209,11 @@ process_wait (tid_t child_tid UNUSED)
     return -1;
   }
 
-<<<<<<< HEAD
   if (child->parent != cur || child->successful_wait_by_parent) {
-=======
-  if(child->parent != cur || /*cur->waiting_on_process != child*/ child->wait) {
->>>>>>> 96c7a0b252f1a20a37cf2c0e47e73a2826791d0b
     return -1;
   }
 
-  while(!child->exited) {
+  while(!child->exit) {
 	  // wait
   }
 
