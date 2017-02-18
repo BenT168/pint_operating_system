@@ -19,6 +19,9 @@ enum thread_status
    You can redefine this to whatever type you like. */
 typedef int tid_t;
 
+/* TASK 2: Process identifier type. */
+typedef int pid_t;
+
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -108,22 +111,29 @@ struct thread
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
+    uint32_t *pagedir;                 /* Page directory. */
 
     /* TASK 2 */
-    struct file *file;
-    struct semaphore load_sema;
-    struct semaphore alive_sema;
-
+    pid_t pid;                        /* Unique process identification */
+    struct file *file;                /* Pointer to execuable file where
+                                         process run */
+    bool child_load_success;          /* True if the last process executed
+                                         by this thread load successfully */
+    struct semaphore load_sema;       /* Semaphore used to wait until a child
+                                         process has loaded*/
+    struct semaphore alive_sema;      /* Semaphore used to wait until a child
+                                         process has died */
     struct thread *parent;            /* Thread of parent process ('null' if no
                                          parent process exists.) */
-
     struct list child_procs;          /* List of threads representing child
                                          processes that have been spawned by
                                          this thread's embedding process. */
-    struct list file_descriptors;
-    struct list pid_to_exit_status;
-    struct list_elem child;           /* List element for 'child_procs' list as
+    struct list file_descriptors;     /* List of file descriptors that the
+                                         process has currently opened. */
+    struct list pid_to_exit_status;   /* Mappings list from process identification
+                                         to the corresponding process' exit
+                                         status. */
+    struct list_elem child;            /* List element for 'child_procs' list as
                                          a processes (single-threaded) can be
                                          both child and parent processes. */
 
@@ -156,6 +166,15 @@ struct thread
 	/* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+  /* TASK 2: Struct for pid exit status. */
+struct pid_exit_status
+  {
+    pid_t pid;
+    int exit_status;
+    struct list_elem elem;
+  };
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

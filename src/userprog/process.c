@@ -196,18 +196,11 @@ and jump to it. */
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
-  struct thread *cur = thread_current ();
   /* Processes are single-threaded and PintOS user kernel threads. So we can
      use a single thread to point to a newly created child process. */
-  struct thread* child;
-  child = get_tid_thread(child_tid);
-
-  if (child == NULL) {
-    /* Child thread terminated by kernel, so return -1.*/
-    return -1;
-  }
+  struct thread *child = get_tid_thread(child_tid);
 
   if (child->parent != cur || child->successful_wait_by_parent) {
     return -1;
@@ -217,10 +210,17 @@ process_wait (tid_t child_tid UNUSED)
 	  // wait
   }
 
-  int exit_status = child->exit_status;
-  child->successful_wait_by_parent = true;
+  for (; e != list_end (&thread_current ()->pid_to_exit_status); e = list_next(e) ){
+    struct pid_exit_status *pes = list_entry (e, struct pid_exit_status, elem);
 
-  return exit_status;
+    if(pes->pid == (pid_t) child_tid) {
+      int exit_status = pes->exit_status;
+      list_remove(e);
+      free(pes);
+      return exit_status;
+    }
+  }
+  return -1;
 }
 
 /* Free the current process's resources. */
@@ -230,11 +230,38 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* TASK 2 : TOCOMMENT */
+  struct list_elem *e = list_begin (&cur-> child_procs);
+
+  for(; e != list_end (&cur->child_procs) ; e = list_next(e)) {
+    struct thread *child = list_entry (e, struct thread, elem);
+    child->parent = NULL;
+  }
+
+  struct list *file_descs = &cur->file_descriptors;
+
+  while (!list_empty (file_descs)) {
+    struct fd_file *fd_file = list_entry ( list_begin (file_descs), struct fd_file, elem);
+    close (fd_file->fd);
+  }
+
+  if (cur->parent) {
+    list_remove (&cur->child);
+  }
+
+  if (cur->file) {
+    file_allow_write(cur->file);
+    file_close (cur->file);
+  }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL)
     {
+      /* TASK 2 : unblock parent thread */
+      sema_up (&cur->alive_sema);
+
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
