@@ -9,9 +9,6 @@
 void syscall_init (void);
 
 /* Tasks 2 : TOCOMMENT */
-struct lock filesys_lock;
-
-/* Tasks 2 : TOCOMMENT */
 struct fd_file {
   struct file *file;
   int fd;

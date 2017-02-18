@@ -217,9 +217,7 @@ wait (pid_t pid)
 bool
 create (const char *file, unsigned initial_size) {
   check_memory_access (file);
-  lock_acquire(&filesys_lock);
   bool check_create = filesys_create(file, initial_size);
-  lock_release(&filesys_lock);
   return check_create;
 }
 
@@ -227,9 +225,7 @@ create (const char *file, unsigned initial_size) {
 bool
 remove (const char *file) {
   check_memory_access (file);
-  lock_acquire(&filesys_lock);
   bool check_remove = filesys_remove(file);
-  lock_release(&filesys_lock);
   return check_remove;
 }
 
@@ -240,14 +236,11 @@ int
 open (const char *file)
 {
   check_memory_access (file);
-  lock_acquire(&filesys_lock);
   struct file *f = filesys_open(file);
   if (f != NULL) {
     int fd = fd_add_file(f);
-    lock_release(&filesys_lock);
 	  return fd;
   }
-  lock_release(&filesys_lock);
   return -1;
 }
 
