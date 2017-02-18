@@ -91,7 +91,7 @@ timer_elapsed (int64_t then)
 
 /* Comparator function that returns true if the thread A wakes up before
    thread B using number of wake_up_tick */
-static bool less_sema_ticks (const struct list_elem *a,
+static bool less_sema_ticks (const struct list_elem *a UNUSED,
                              const struct list_elem *b,
                              void *aux) {
   int64_t *ticks_ptr = (int64_t*) aux;

@@ -234,7 +234,7 @@ thread_create (const char *name, int priority,
   #ifdef USERPROG
   t->parent = thread_current ();
 
-  t->wait = false;
+  t->successful_wait_by_parent = false;
   t->exit = false;
   list_init(&t->child_procs);
   list_init(&t->file_descriptors);
@@ -243,6 +243,13 @@ thread_create (const char *name, int priority,
 
    if (thread_current () != initial_thread) {
     list_push_back (&thread_current ()->child_procs, &t->child);
+  }
+
+  /* Adds the new proc to childrens of the current proc */
+  if (thread_current ()->parent != NULL)
+  {
+    list_push_back (&thread_current ()->parent->child_procs,
+                    &thread_current ()->elem);
   }
 
   #endif
@@ -324,13 +331,14 @@ thread_tid (void)
 /* TASK 2: Returns thread with the tid number given */
 struct thread*
 get_tid_thread(tid_t tid) {
-struct list_elem *e;
+  struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list);
     e = list_next (e)) {
     struct thread *t = list_entry (e, struct thread, allelem);
-    if (t->tid == tid)
+    if (t->tid == tid) {
       return t;
     }
+  }
   return NULL;
 }
 
@@ -342,23 +350,7 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
   #ifdef USERPROG
-
-    struct list_elem *e;
-
-    for (e = list_begin (&thread_current ()->child_procs); e != list_end (&thread_current ()->child_procs);
-      e = list_next (e)) {
-      struct thread *t = list_entry (e, struct thread, child);
-      if (!t->exit) {
-          t->parent = NULL;
-          list_remove (&t->child);
-      }
- 	  }
-
     process_exit ();
-
-    if (thread_current ()->parent != NULL && thread_current ()->parent != initial_thread) {
-      list_remove (&thread_current ()->child);
-	  }
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
@@ -584,6 +576,17 @@ init_thread (struct thread *t, const char *name, int priority)
       t->lock_waiting = NULL;
       list_init(&t->threads_donated);
     }
+
+  /* TASK 2: Initialize all the struct and list for process running */
+  #ifdef USERPROG
+      t->file = NULL;
+      t->child_load_success = false;
+      sema_init (&t->load_sema, 0);
+      sema_init (&t->alive_sema, 0);
+      list_init (&t->child_procs);
+      list_init (&t->file_descriptors);
+      list_init (&t->pid_to_exit_status);
+  #endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
