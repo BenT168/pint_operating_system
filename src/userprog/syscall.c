@@ -34,57 +34,6 @@ check_memory_access(const void *ptr) {
 /* Tasks 2 : TOCOMMENT */
 int fd_add_file (struct file *file)
 {
-  printf ("system call!\n");
-
-  uint32_t *args_pointer = f->esp;
-  uint32_t syscall_num = *args_pointer;
-
-  switch (syscall_num) {
-    case SYS_HALT:
-      halt();
-      break;
-    case SYS_EXIT:
-      exit(*(args_pointer+4));
-      break;
-    case SYS_EXEC:
-      f->eax = exec(*(args_pointer+4));
-      break;
-    case SYS_WAIT:
-      f->eax = wait(*(args_pointer+4));
-      break;
-    case SYS_CREATE:
-      f->eax = create(*(args_pointer+4), *(args_pointer+8));
-      break;
-    case SYS_REMOVE:
-      f->eax = remove(*(args_pointer+4));
-      break;
-    case SYS_OPEN:
-      f->eax = open(*(args_pointer+4));
-      break;
-    case SYS_FILESIZE:
-      f->eax = filesize(*(args_pointer+4));
-      break;
-    case SYS_READ:
-      f->eax = read(*(args_pointer+4), *(args_pointer+8), *(args_pointer+12));
-      break;
-    case SYS_WRITE:
-      f->eax = write(*(args_pointer+4), *(args_pointer+8), *(args_pointer+12));
-      break;
-    case SYS_SEEK:
-      seek(*(args_pointer+4), *(args_pointer+8));
-      break;
-    case SYS_TELL:
-      f->eax = tell(*(args_pointer+4));
-      break;
-    case SYS_CLOSE:
-      close(*(args_pointer+4));
-      break;
-    default:
-      printf("System call not available.\n");
-      break;
-  }
-  thread_exit ();
-
   struct fd_file *fd_desc = malloc(sizeof(struct fd_file));
   fd_desc->file = file;
   fd_desc->fd = fd_id;
@@ -193,6 +142,58 @@ syscall_handler (struct intr_frame *f)
       printf("System call number %d is invalid.\n", syscall_num);
 
   }
+  /*
+  printf ("system call!\n");
+
+  uint32_t *args_pointer = f->esp;
+  uint32_t syscall_num = *args_pointer;
+
+  switch (syscall_num) {
+    case SYS_HALT:
+      halt();
+      break;
+    case SYS_EXIT:
+      exit(*(args_pointer+4));
+      break;
+    case SYS_EXEC:
+      f->eax = exec(*(args_pointer+4));
+      break;
+    case SYS_WAIT:
+      f->eax = wait(*(args_pointer+4));
+      break;
+    case SYS_CREATE:
+      f->eax = create(*(args_pointer+4), *(args_pointer+8));
+      break;
+    case SYS_REMOVE:
+      f->eax = remove(*(args_pointer+4));
+      break;
+    case SYS_OPEN:
+      f->eax = open(*(args_pointer+4));
+      break;
+    case SYS_FILESIZE:
+      f->eax = filesize(*(args_pointer+4));
+      break;
+    case SYS_READ:
+      f->eax = read(*(args_pointer+4), *(args_pointer+8), *(args_pointer+12));
+      break;
+    case SYS_WRITE:
+      f->eax = write(*(args_pointer+4), *(args_pointer+8), *(args_pointer+12));
+      break;
+    case SYS_SEEK:
+      seek(*(args_pointer+4), *(args_pointer+8));
+      break;
+    case SYS_TELL:
+      f->eax = tell(*(args_pointer+4));
+      break;
+    case SYS_CLOSE:
+      close(*(args_pointer+4));
+      break;
+    default:
+      printf("System call not available.\n");
+      break;
+  }
+  thread_exit ();
+  */
 }
 
 /* TASK 2: Terminates Pintos by calling shutdown_power_off() */
@@ -366,6 +367,6 @@ tell (int fd) {
 /* Tasks 2 : TOCOMMENT */
 void
 close (int fd) {
-  struct file* file =  fd_get_file(fd);
+  struct file* file = fd_get_file(fd);
   file_close(file);
 }

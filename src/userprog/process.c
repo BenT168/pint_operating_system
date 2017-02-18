@@ -20,7 +20,6 @@
 #include "threads/vaddr.h"
 
 #define MAX_ARGS 50
-#define FORK_FAILURE -1
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -202,23 +201,23 @@ process_wait (tid_t child_tid)
      use a single thread to point to a newly created child process. */
   struct thread *child = get_tid_thread(child_tid);
 
-  if (child->parent != cur || child->successful_wait_by_parent) {
-    return -1;
+  /* TASK 2 : TOCOMMENT */
+  if (child) {
+   sema_down(&child->alive_sema);
   }
 
-  while(!child->exit) {
-	  // wait
-  }
+  /* TASK 2 : TOCOMMENT */
+  struct list_elem *e = list_begin (&thread_current ()->pid_to_exit_status);
 
   for (; e != list_end (&thread_current ()->pid_to_exit_status); e = list_next(e) ){
-    struct pid_exit_status *pes = list_entry (e, struct pid_exit_status, elem);
+   struct pid_exit_status *pes = list_entry (e, struct pid_exit_status, elem);
 
-    if(pes->pid == (pid_t) child_tid) {
-      int exit_status = pes->exit_status;
-      list_remove(e);
-      free(pes);
-      return exit_status;
-    }
+   if(pes->pid == (pid_t) child_tid) {
+     int exit_status = pes->exit_status;
+     list_remove(e);
+     free(pes);
+     return exit_status;
+   }
   }
   return -1;
 }
