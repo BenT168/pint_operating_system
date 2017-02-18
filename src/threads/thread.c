@@ -243,16 +243,9 @@ thread_create (const char *name, int priority,
   list_init (&t->file_descriptors);
   list_init (&t->pid_to_exit_status);
 
-  if (thread_current () != initial_thread) {
-    list_push_back (&thread_current ()->child_procs, &t->child);
-  }
-
   /* Adds the new proc to childrens of the current proc */
-  if (thread_current ()->parent != NULL)
-  {
-    list_push_back (&thread_current ()->parent->child_procs,
+  list_push_back (&thread_current ()->parent->child_procs,
                     &thread_current ()->child);
-  }
   #endif
 
   return tid;
