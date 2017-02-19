@@ -16,6 +16,7 @@
 #define STDIN_FILENO 0
 #define MAX_BUFFER_LENGTH 512
 #define MAX_SYSCALL_ARGS 3
+#define FILE_OPEN_FAILURE -1
 
 static void syscall_handler (struct intr_frame *);
 
@@ -181,7 +182,7 @@ sys_open (const char *file)
 
   int fd;
   if (!file_ptr)
-    fd = 1;
+    fd = FILE_OPEN_FAILURE;
   else
     fd = thread_add_new_file (file_ptr);
 
