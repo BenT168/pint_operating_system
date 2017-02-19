@@ -58,7 +58,7 @@ setup_process_stack (void **esp_addr, char *only_args, char *exec_file_name)
   char *save_ptr;
   char *arg;
 
-  int args_length = strlen (only_args) + strlen (exec_file_name) + 1;
+  int args_length = strlen (only_args) + strlen (exec_file_name) + 2;
 
   char **args = (char**) malloc (args_length * sizeof (char*));
 

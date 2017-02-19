@@ -15,6 +15,7 @@
 #define STDOUT_FILENO 1
 #define STDIN_FILENO 0
 #define MAX_BUFFER_LENGTH 512
+#define MAX_SYSCALL_ARGS 3
 
 static void syscall_handler (struct intr_frame *);
 
@@ -85,6 +86,10 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f)
 {
+  verify_user_addr (f->esp);
+  // arguments to system calls must be in user address space.
+  verify_user_addr (f->esp + 4 * MAX_SYSCALL_ARGS);
+
   syscall_dispatcher syscall_procedure;
   int syscall_num;
   int syscall_ret_val;
@@ -112,7 +117,10 @@ sys_exit (int status)
 
   cur->exit_status = status;
 
-  printf ("%s: exit(%d)\n", cur->name, status);
+  char *save_ptr;
+  char *proper_thread_name = strtok_r (cur->name, " ", &save_ptr);
+
+  printf ("%s: exit(%d)\n", proper_thread_name, status);
 
   thread_exit ();
   return status;
