@@ -24,7 +24,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static int setup_process_stack (void **esp_addr, char* args);
+static void setup_process_stack (void **esp_addr, char *only_args, char *exec_file_name);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -50,91 +50,79 @@ process_execute (const char *file_name)
  return tid;
 }
 
-/* Sets up the process stack, returning if the stack is successfully setup and
-   0 otherwise.*/
-static int
-setup_process_stack (void **esp_addr, char* args)
+static void
+setup_process_stack (void **esp_addr, char *only_args, char *exec_file_name)
 {
-  int argc;
-  void *stack_pointer;
+  int argc = 0;
+  void *stack_pointer = *esp_addr;
   char *save_ptr;
-  char *token;
+  char *arg;
 
-  argc = 0;
-  stack_pointer = *esp_addr;
+  int args_length = strlen (only_args) + strlen (exec_file_name) + 1;
 
-  /* Tokenise command-line arguments and push each argument onto the stack.*/
-  for (token = strtok_r (args, " ", &save_ptr); token != NULL;
-       token = strtok_r (NULL, " ", &save_ptr))
-  {
-    size_t token_length = strlen (token) + 1;
+  char **args = (char**) malloc (args_length * sizeof (char*));
 
-    /* Stack grows downwards but fills upwards, so we must make space before
-       pushing data onto the stack. */
-    stack_pointer = (void *) (((char *) stack_pointer) - token_length);
-    strlcpy ((char*) stack_pointer, token, token_length);
-    argc++;
+  /* Because of the possibility of having multiple spaces between areguments, we must recalculate 'args_length'. This because strings, when pushed on the stack, are only separated by a single null terminator. */
 
-    /* Enforce limit on number of arguments. */
-    if (PHYS_BASE - stack_pointer > MAX_ARGS)
-      return 0;
+  args_length  = strlen (exec_file_name) + 1;
+  args[argc++] = exec_file_name;
+
+  for (arg = strtok_r (only_args, " ", &save_ptr); arg != NULL;
+       arg = strtok_r (NULL, " ", &save_ptr)) {
+    args_length += strlen(arg) + 1;
+    args[argc++] = arg;
   }
 
-  /* Set argument pointer for later use. */
-  char *arg_pointer = (char *) stack_pointer;
+  // TODO: Remove print statement
+  //printf("argc: %d\n", argc);
 
-  /* Perform word-algnment. In other words, round stack pointer down to a
-     multiple of 4. */
-  stack_pointer = (void *) (((intptr_t) stack_pointer) & 0xfffffffc);
+  int **arg_addresses = (int **) malloc (argc * sizeof (int*));
+
+  /* Push arguments onto stack. */
+  for (int i = argc - 1; i >= 0; i--)
+  {
+    int arg_length = strlen (args[i]) + 1;
+    stack_pointer -= arg_length;
+    arg_addresses[i] = stack_pointer;
+    strlcpy (stack_pointer, args[i], arg_length);
+    // TODO: Remove print statement.
+    //printf("args[%d]: %s\n", i, args[i]);
+  }
+
+  /* Calculate word-algnment offset. */
+  int word_align_offset = args_length % 4;
+
+  /* Perform alignment if necessary. */
+  stack_pointer -= word_align_offset != 0 ? 4 - word_align_offset : 0;
 
   /* Push null sentinel. */
-  stack_pointer = ((char **) stack_pointer) - 1;
-  *((char *) stack_pointer) = '\0';
+  stack_pointer -= 4;
+  *(int *) stack_pointer = 0;
 
-  /* Push addresses to arguments. */
-
-  /* First, make sufficient space for stack pointer to push addresses to
-     arguments in reverse order. */
-  stack_pointer = ((char **) stack_pointer) - argc;
-
-  // At this point, 'arg_pointer - 1 == '\0'' if no word-algnment of the stack
-  // pointer took place. We increment 'arg_pointer' in order to prevent this
-  // breaking the code in the while loop below.
-  arg_pointer++;
-
-  int args_pushed = 0;
-
-  while (args_pushed < argc) {
-    // While we have not yet traversed an entire string.
-    while (arg_pointer - 1 != '\0') {
-      arg_pointer++;
-    }
-    // At this point 'arg_pointer' is pointing to the start of a new argument,
-    // or the start of the data just above the last argument.
-    *((char **) stack_pointer) = arg_pointer;
-    stack_pointer = ((char **) stack_pointer) + 1;
-    args_pushed++;
-    // To avoid inner while condition being true on next loop.
-    arg_pointer++;
+  /* Push argument addresses. */
+  for (int i = argc - 1; i >= 0; i--)
+  {
+    stack_pointer -= 4;
+    *(void **) stack_pointer = arg_addresses[i];
   }
 
-  /* Push 'argv' */
-  stack_pointer = ((char **) stack_pointer) - argc;
-  char** argv_pointer = stack_pointer;
-  stack_pointer = ((char **) stack_pointer) - 1;
-  *((char ***) stack_pointer) = argv_pointer;
+  /* Push address of 'argv'. */
+  stack_pointer -= 4;
+  *(char ***) stack_pointer = stack_pointer + 4;
 
-  /* Push 'argc' */
-  stack_pointer = ((int *) stack_pointer) - 1;
-  *((int *) stack_pointer) = argc;
+  /* Push 'argc'. */
+  stack_pointer -= 4;
+  *(int *) stack_pointer = argc;
 
-  /* Push dummy return address (null sentinel) */
-  stack_pointer = ((void **) stack_pointer) - 1;
-  *((void **) stack_pointer) = 0;
+  /* Push fake return address. */
+  stack_pointer -= 4;
+  *(int *) stack_pointer = 0;
 
   *esp_addr = stack_pointer;
 
-  return 1;
+  /* Deallocate memory. */
+  free (args);
+  free (arg_addresses);
 }
 
 /* A thread function that loads a user process and starts it
@@ -144,9 +132,7 @@ start_process (void *file_name_)
 {
   /* 'file_name_with_args' denotes a pointer to a series of space-separated
      strings, the first of which is the actual file name. */
-  char *file_name_with_args = file_name_;
-  char *args;
-  char *save_ptr;
+  char *file_name = file_name_;
   struct intr_frame if_;
   bool elf_load_success;
 
@@ -158,21 +144,25 @@ start_process (void *file_name_)
 
   /* TASK 2 : Initialize and set up the stack */
 
-  /* Extract file name and load ELF executable. */
-  args = strtok_r (file_name_with_args, " ", &save_ptr);
-  elf_load_success = load (file_name_with_args, &if_.eip, &if_.esp);
+  char *save_ptr;
+  char *exec_file_name = strtok_r (file_name, " ", &save_ptr);
+
+  //printf("Args: %s, Save Ptr: %s\n", args, save_ptr);
+  elf_load_success = load (exec_file_name, &if_.eip, &if_.esp);
 
   if (elf_load_success)
   {
+    struct file *file = filesys_open (exec_file_name);
+    thread_add_new_file (file);
+    file_deny_write (file);
     /* If ELF executable loads successfully, setup the process' stack. */
-    setup_process_stack (&if_.esp, args);
+    setup_process_stack (&if_.esp, save_ptr, exec_file_name);
   }
   else
   {
-    palloc_free_page (file_name_with_args);
+    palloc_free_page (file_name);
     thread_exit ();
   }
-  palloc_free_page (file_name_with_args);
 
   /* END TASK 2 */
 
@@ -198,25 +188,32 @@ and jump to it. */
 int
 process_wait (tid_t child_tid)
 {
+  struct thread *cur = thread_current ();
+
   /* Processes are single-threaded and PintOS user kernel threads. So we can
      use a single thread to point to a newly created child process. */
-  struct thread *child = get_tid_thread(child_tid);
+  struct thread *child = fetch_by_tid(child_tid);
 
-  if (child->parent != cur || child->successful_wait_by_parent) {
+  if (child == NULL || child->parent != cur ||
+      child->successful_wait_by_parent) {
     return -1;
   }
 
-  while(!child->exit) {
-	  // wait
-  }
+  child->successful_wait_by_parent = true;
 
-  for (; e != list_end (&thread_current ()->pid_to_exit_status); e = list_next(e) ){
+  // Semaphore will become unblocked when thread 'child' dies.
+  sema_down (&child->alive_sema);
+
+  struct list_elem *e = list_begin (&cur->pid_to_exit_status);
+
+  for (; e != list_end (&cur->pid_to_exit_status); e = list_next(e) )
+  {
     struct pid_exit_status *pes = list_entry (e, struct pid_exit_status, elem);
 
-    if(pes->pid == (pid_t) child_tid) {
+    if(pes->pid == (pid_t) child_tid)
+    {
       int exit_status = pes->exit_status;
       list_remove(e);
-      free(pes);
       return exit_status;
     }
   }
@@ -230,11 +227,29 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* We must send the information about the child's exit status to the
+     parent (if one exists) before this thread dies. */
+  if (cur->parent != NULL)
+  {
+    struct pid_exit_status *pes = malloc (sizeof (struct pid_exit_status));
+    pes->pid = cur->pid;
+    pes->exit_status = cur->exit_status;
+    list_push_back (&cur->parent->pid_to_exit_status, &pes->elem);
+  }
+
+  /* Free 'pid_to_exit_status' list to prevent memory leak. */
+  while (!list_empty (&cur->pid_to_exit_status))
+  {
+    struct list_elem *temp = list_pop_front (&cur->pid_to_exit_status);
+    struct pid_exit_status *pes = list_entry (temp, struct pid_exit_status, elem);
+    free (pes);
+  }
+
   /* TASK 2 : TOCOMMENT */
   struct list_elem *e = list_begin (&cur-> child_procs);
 
   for(; e != list_end (&cur->child_procs) ; e = list_next(e)) {
-    struct thread *child = list_entry (e, struct thread, elem);
+    struct thread *child = list_entry (e, struct thread, child_elem);
     child->parent = NULL;
   }
 
@@ -242,11 +257,7 @@ process_exit (void)
 
   while (!list_empty (file_descs)) {
     struct fd_file *fd_file = list_entry ( list_begin (file_descs), struct fd_file, elem);
-    close (fd_file->fd);
-  }
-
-  if (cur->parent) {
-    list_remove (&cur->child);
+    sys_close (fd_file->fd);
   }
 
   if (cur->file) {
@@ -254,14 +265,13 @@ process_exit (void)
     file_close (cur->file);
   }
 
+  sema_up (&cur->alive_sema);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL)
     {
-      /* TASK 2 : unblock parent thread */
-      sema_up (&cur->alive_sema);
-
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the

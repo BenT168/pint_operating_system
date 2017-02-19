@@ -198,6 +198,10 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+#ifdef USERPROG
+  add_child_thread (thread_current (), tid);
+#endif
+
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack'
      member cannot be observed. */
@@ -230,29 +234,7 @@ thread_create (const char *name, int priority,
   check_max_priority();
   intr_set_level (old_level);
 
-  /* TASK 2 */
-  #ifdef USERPROG
-  t->parent = thread_current ();
-
-  t->successful_wait_by_parent = false;
-  t->exit = false;
-  list_init(&t->child_procs);
-  list_init(&t->file_descriptors);
-  list_init(&t->pid_to_exit_status);
-  list_init(&t->file_list);
-
-   if (thread_current () != initial_thread) {
-    list_push_back (&thread_current ()->child_procs, &t->child);
-  }
-
-  /* Adds the new proc to childrens of the current proc */
-  if (thread_current ()->parent != NULL)
-  {
-    list_push_back (&thread_current ()->parent->child_procs,
-                    &thread_current ()->elem);
-  }
-
-  #endif
+  sema_up (&t->load_sema);
 
   return tid;
 }
@@ -330,7 +312,7 @@ thread_tid (void)
 
 /* TASK 2: Returns thread with the tid number given */
 struct thread*
-get_tid_thread(tid_t tid) {
+fetch_by_tid(tid_t tid) {
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list);
     e = list_next (e)) {
@@ -347,18 +329,20 @@ get_tid_thread(tid_t tid) {
 void
 thread_exit (void)
 {
+  struct thread *cur = thread_current ();
+
   ASSERT (!intr_context ());
 
-  #ifdef USERPROG
-    process_exit ();
+#ifdef USERPROG
+  process_exit ();
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
-  thread_current ()->status = THREAD_DYING;
+  list_remove (&cur->allelem);
+  cur->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
 }
@@ -578,15 +562,18 @@ init_thread (struct thread *t, const char *name, int priority)
     }
 
   /* TASK 2: Initialize all the struct and list for process running */
-  #ifdef USERPROG
-      t->file = NULL;
-      t->child_load_success = false;
-      sema_init (&t->load_sema, 0);
-      sema_init (&t->alive_sema, 0);
-      list_init (&t->child_procs);
-      list_init (&t->file_descriptors);
-      list_init (&t->pid_to_exit_status);
-  #endif
+#ifdef USERPROG
+  t->file = NULL;
+  t->child_load_success = false; //TODO: Is this relevant?
+  t->successful_wait_by_parent = false;
+  t->next_fd = 2;
+  sema_init (&t->load_sema, 0);
+  sema_init (&t->alive_sema, 0);
+  list_init (&t->child_procs);
+  list_init (&t->file_descriptors);
+  list_init (&t->pid_to_exit_status);
+  list_init (&t->file_list);
+#endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -907,3 +894,51 @@ void load_avg_thread_mlfqs (void)
   load_avg = add_x_y(load_avg_mul, ready_threads_60);
 
 }
+
+#ifdef USERPROG
+/* Adds thread with TID 'child_tid' to list of child threads of 't'. */
+void
+add_child_thread (struct thread *t, tid_t child_tid)
+{
+  struct thread *child = fetch_by_tid (child_tid);
+  child->parent        = t;
+
+  list_push_back (&t->child_procs, &child->child_elem);
+}
+
+/* Adds new file to list of files opened by the running thread. Returns
+   the file descriptor of the new file. */
+int
+thread_add_new_file (struct file *file)
+{
+  struct thread *cur = thread_current ();
+  struct file_handle *handle = malloc (sizeof (struct file_handle));
+
+  handle->file = file;
+  handle->fd = cur->next_fd++;
+
+  list_push_front (&cur->file_list, &handle->elem);
+
+  return handle->fd;
+}
+
+/* Retrieves file handle with the given file descriptor from the list of
+   file handles 'file_list'. If the handle is not present, this function
+   returns null. Every time a file is opened (even the same file), a new
+   handle is created (in addition to existing ones for already opened
+   files) with a new file descriptor.*/
+struct file_handle*
+thread_get_file_handle (struct list *file_list, int fd)
+{
+  struct list_elem *e = list_begin (file_list);
+
+  for (; e != list_end (file_list); e = list_next (e))
+  {
+    struct file_handle *handle = list_entry (e, struct file_handle, elem);
+
+    if (handle->fd == fd)
+      return handle;
+  }
+  return NULL;
+}
+#endif
