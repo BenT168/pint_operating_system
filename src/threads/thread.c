@@ -231,8 +231,12 @@ thread_create (const char *name, int priority,
   intr_set_level (old_level);
 
   #ifdef USERPROG
-  t->pid = (pid_t) tid;
-  t->parent = thread_current ();
+
+  /* TASK 2: Adds thread with TID to list of child threads of thread_current (). */
+  struct thread *child = get_tid_thread (tid);
+  child->parent        = thread_current ();
+
+  list_push_back (&thread_current ()->child_procs, &child->child_elem);
   #endif
 
   return tid;
@@ -560,11 +564,13 @@ init_thread (struct thread *t, const char *name, int priority)
   #ifdef USERPROG
       t->file = NULL;
       t->child_load_success = false;
+      t->next_fd = 2;
       sema_init (&t->load_sema, 0);
       sema_init (&t->alive_sema, 0);
       list_init (&t->child_procs);
       list_init (&t->file_descriptors);
       list_init (&t->pid_to_exit_status);
+      list_init (&t->file_list);
   #endif
 
   old_level = intr_disable ();
@@ -886,3 +892,43 @@ void load_avg_thread_mlfqs (void)
   load_avg = add_x_y(load_avg_mul, ready_threads_60);
 
 }
+
+/* TASK 2 */
+#ifdef USERPROG
+
+/* Adds new file to list of files opened by the running thread. Returns
+   the file descriptor of the new file. */
+int
+thread_add_new_file (struct file *file)
+{
+  struct thread *cur = thread_current ();
+  struct file_handle *handle = malloc (sizeof (struct file_handle));
+
+  handle->file = file;
+  handle->fd = cur->next_fd++;
+
+  list_push_front (&cur->file_list, &handle->elem);
+
+  return handle->fd;
+}
+
+/* Retrieves file handle with the given file descriptor from the list of
+   file handles 'file_list'. If the handle is not present, this function
+   returns null. Every time a file is opened (even the same file), a new
+   handle is created (in addition to existing ones for already opened
+   files) with a new file descriptor.*/
+struct file_handle*
+thread_get_file_handle (struct list *file_list, int fd)
+{
+  struct list_elem *e = list_begin (file_list);
+
+  for (; e != list_end (file_list); e = list_next (e))
+  {
+    struct file_handle *handle = list_entry (e, struct file_handle, elem);
+
+    if (handle->fd == fd)
+      return handle;
+  }
+  return NULL;
+}
+#endif

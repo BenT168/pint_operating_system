@@ -133,20 +133,17 @@ struct thread
     struct list pid_to_exit_status;   /* Mappings list from process identification
                                          to the corresponding process' exit
                                          status. */
-    struct list_elem child;            /* List element for 'child_procs' list as
+    struct list file_list;            /* File list used for file system calls*/
+    struct list_elem child_elem;      /* List element for 'child_procs' list as
                                          a processes (single-threaded) can be
                                          both child and parent processes. */
-
-    /* A thread can only have one parent. So
-    we use this member to check whether this thread's parent has successfully
-    waited on it. If this is true, then the thread has exited and the thread
-    TID of this thread (but not the thread itself) must be dead. In this state,
-    the thread can no longer run. */
-    bool successful_wait_by_parent;
-    bool exit;                        /* Checks if thread has exited */
+    bool successful_wait_by_parent;   /* A thread can only have one parent. So
+                                         we use this member to check whether
+                                         this thread's parent has successfully
+                                         waited on it. */
     int exit_status;                  /* exit status of thread */
-	  struct list file_list;            /* File list used for file system calls*/
 	  int fd;
+    int next_fd;                      /* Next file descriptor to use. */
 #endif
 
     /* TASK 0 */
@@ -173,6 +170,14 @@ struct pid_exit_status
     pid_t pid;
     int exit_status;
     struct list_elem elem;
+  };
+
+  /* TASK 2: TOCOMMENT */
+struct file_handle
+  {
+    int fd;                   /* File descriptor of file. */
+    struct file *file;        /* Pointer to file struct. */
+    struct list_elem elem;    /* List element. */
   };
 
 
@@ -232,5 +237,7 @@ void load_avg_thread_mlfqs (void);
 
 /* TASK 2 */
 struct thread* get_tid_thread(tid_t tid);
+int thread_add_new_file (struct file *file);
+struct file_handle* thread_get_file_handle (struct list *file_list, int fd);
 
 #endif /* threads/thread.h */

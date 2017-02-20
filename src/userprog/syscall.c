@@ -11,9 +11,16 @@
 #include "devices/shutdown.h"
 #include "devices/input.h"
 
+#define MAX_NUM_SYSCALLS 322
+#define STDOUT_FILENO 1
+#define STDIN_FILENO 0
+#define MAX_BUFFER_LENGTH 512
+#define MAX_SYSCALL_ARGS 3
+#define FILE_OPEN_FAILURE -1
 
 static void syscall_handler (struct intr_frame *);
 
+static struct lock filesys_lock;
 static int fd_id = 2;
 
 void
@@ -30,6 +37,19 @@ check_memory_access(const void *ptr) {
         exit(-1);
       }
 }
+
+static void
+acquire_filesys_lock (void)
+{
+  lock_acquire (&filesys_lock);
+}
+
+static void
+release_filesys_lock (void)
+{
+  lock_release (&filesys_lock);
+}
+
 
 /* Tasks 2 : TOCOMMENT */
 int fd_add_file (struct file *file)
@@ -286,20 +306,18 @@ open (const char *file)
   if (!file) return -1;
 
   check_memory_access (file);
+
+  acquire_filesys_lock ();
   struct file *f = filesys_open(file);
-  /* Create fd_file struct to be added to thread's file_descriptors */
-  struct fd_file *fd_f = malloc(sizeof(struct fd_file));
+  release_filesys_lock ();
 
-  if (!f) return -1;
-  if (fd_f == NULL) {
-    file_close(f);
-    return -1;
-  }
+  int fd;
+  if (!f)
+    fd = FILE_OPEN_FAILURE;
+  else
+    fd = thread_add_new_file (f);
 
-  fd_f->file = f;
-  fd_f->fd = fd_id++;
-  list_push_back(&thread_current()->file_descriptors, &fd_f->elem);
-  return fd_id;
+  return fd;
 }
 
 /* Tasks 2 : Returns the size, in bytes, of the file open as fd.
@@ -315,26 +333,47 @@ filesize (int fd) {
    be read (due to a condition other than end of file). */
 int
 read (int fd, void *buffer, unsigned size) {
-  check_memory_access(buffer);
-  char *buf = buffer;
-  int num_bytes_r;
-  switch (fd) {
-    case 0 :
-      {
-        for(unsigned i = 0; i < size; ++i){
-          *(uint8_t *)(buf + i) = input_getc ();
-        }
-        num_bytes_r = size;
-      }
-      break;
-    case 1 :
-      num_bytes_r = -1;
-      break;
-    default :
-      num_bytes_r = file_read(fd_get_file(fd)->file, buffer, size);
-      break;
+  struct thread *cur = thread_current ();
+  int bytes_read = 0;
+
+  // Verify buffer points to valid user address.
+  check_memory_access (buffer);
+
+  if (fd == STDOUT_FILENO)
+  {
+    // Attempt to read from standard output.
+    bytes_read = -1;
+    exit (bytes_read);
   }
-  return num_bytes_r;
+  else if (fd == STDIN_FILENO)
+  {
+    acquire_filesys_lock ();
+
+    uint8_t *u8t_buffer = (uint8_t *) buffer;
+    for (unsigned i = 0; i < size; i++, bytes_read++)
+    {
+      // Read one byte at a time.
+      u8t_buffer[i] = input_getc ();
+    }
+
+    release_filesys_lock ();
+  }
+  else
+  {
+    // Get file handle if it exists.
+    struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
+
+    if (!handle)
+    {
+      bytes_read = -1;
+      exit (bytes_read);
+    }
+
+    acquire_filesys_lock ();
+    bytes_read = file_read (handle->file, buffer, size);
+    release_filesys_lock ();
+  }
+  return bytes_read;
 }
 
 /* TASK 2: Writes size bytes from buffer to the open file fd.
@@ -343,25 +382,48 @@ read (int fd, void *buffer, unsigned size) {
 int
 write (int fd, const void *buffer, unsigned size)
 {
+  struct thread *cur = thread_current ();
+  int bytes_written = 0;
+
   check_memory_access (buffer);
-  int num_bytes_w;
-  switch (fd) {
-    case 0 :
-      num_bytes_w = -1;
-      break;
-    case 1 :
-      while (size > 200){
-        putbuf (buffer, size);
-        size = size - 200;
-      }
-      putbuf (buffer, size);
-      num_bytes_w = size;
-      break;
-    default :
-      num_bytes_w = file_write(fd_get_file(fd)->file, buffer, size);
-      break;
+
+  if (fd == STDIN_FILENO)
+  {
+    // Attempt to write to standard input.
+    bytes_written = -1;
+    exit (bytes_written);
   }
-  return num_bytes_w;
+  else if (fd == STDOUT_FILENO)
+  {
+    acquire_filesys_lock ();
+
+    while (size > MAX_BUFFER_LENGTH)
+    {
+      putbuf ((char *) (buffer + bytes_written), MAX_BUFFER_LENGTH);
+      bytes_written += MAX_BUFFER_LENGTH;
+      size -= MAX_BUFFER_LENGTH;
+    }
+    putbuf ((char *) buffer, size);
+    bytes_written += size;
+
+    release_filesys_lock ();
+  }
+  else
+  {
+    // Get file handle if it exists.
+    struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
+
+    if (!handle)
+    {
+      bytes_written = -1;
+      exit (bytes_written);
+    }
+
+    acquire_filesys_lock ();
+    bytes_written = file_write (handle->file, buffer, size);
+    release_filesys_lock ();
+  }
+  return bytes_written;
 }
 
 /* Tasks 2 : Changes the next byte to be read or written in open file fd to
