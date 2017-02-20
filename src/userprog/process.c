@@ -50,13 +50,11 @@ process_execute (const char *file_name)
  return tid;
 }
 
-/* Sets up the process stack, returning if the stack is successfully setup and
-   0 otherwise.*/
 static void
 setup_process_stack (void **esp_addr, char *only_args, char *exec_file_name)
 {
   int argc = 0;
-  void *stack_pointer = *esp_addr;;
+  void *stack_pointer = *esp_addr;
   char *save_ptr;
   char *arg;
 
@@ -136,7 +134,6 @@ start_process (void *file_name_)
      strings, the first of which is the actual file name. */
   char *file_name = file_name_;
   struct intr_frame if_;
-  char *save_ptr;
   bool elf_load_success;
 
   /* Initialize interrupt frame and load executable. */
@@ -147,7 +144,7 @@ start_process (void *file_name_)
 
   /* TASK 2 : Initialize and set up the stack */
 
-  /* Extract file name and load ELF executable. */
+  char *save_ptr;
   char *exec_file_name = strtok_r (file_name, " ", &save_ptr);
   elf_load_success = load (exec_file_name, &if_.eip, &if_.esp);
 
@@ -250,7 +247,7 @@ process_exit (void)
   struct list_elem *e = list_begin (&cur-> child_procs);
 
   for(; e != list_end (&cur->child_procs) ; e = list_next(e)) {
-    struct thread *child = list_entry (e, struct thread, elem);
+    struct thread *child = list_entry (e, struct thread, child_elem);
     child->parent = NULL;
   }
 
@@ -266,7 +263,6 @@ process_exit (void)
     file_close (cur->file);
   }
 
-  /* TASK 2 : unblock parent thread */
   sema_up (&cur->alive_sema);
 
   /* Destroy the current process's page directory and switch back
