@@ -37,10 +37,10 @@ static struct lock filelock;
 /* Tasks 2 : TOCOMMENT */
 static void
 check_memory_access(const void *ptr) {
-  if (!ptr || !is_user_vaddr (ptr) ||
-      ! pagedir_get_page (thread_current () ->pagedir, ptr)){
-        exit(-1);
-      }
+  if (ptr == NULL || !is_user_vaddr (ptr) ||
+    pagedir_get_page (thread_current () ->pagedir, ptr) == NULL) {
+      exit(-1);
+  }
 }
 
 
@@ -137,6 +137,12 @@ exit (int status)
 {
   struct thread *cur = thread_current ();
 
+  if(cur->parent != NULL) {
+    struct pid_exit_status* pid_exit_status = malloc(sizeof(struct pid_exit_status));
+    pid_exit_status->pid = cur->pid;
+    pid_exit_status->exit_status = status;
+    list_push_back(&cur->parent->pid_to_exit_status, &pid_exit_status->elem);
+  }
   cur->exit_status = status;
 
   char *save_ptr;
@@ -155,13 +161,22 @@ exit (int status)
 pid_t
 exec (const char *cmd_line)
 {
-  if (!cmd_line) exit(-1);
-  check_memory_access(cmd_line);
 
-   /* Acquire lock because of call to thread_create */
-	acquire_filelock ();
-  pid_t process_id = (pid_t) process_execute(cmd_line);
-  release_filelock ();
+  check_memory_access(cmd_line);
+  tid_t thread_id = process_execute(cmd_line);
+  pid_t process_id = (pid_t) thread_id;
+
+  if (thread_id == TID_ERROR) return -1;
+
+  struct thread* proc_thread = get_tid_thread(thread_id);
+
+  if(proc_thread) { // a valid pointer
+    sema_down(&proc_thread->load_sema);
+  }
+
+  if (!thread_current ()->child_load_success) return -1;
+
+  //if(!thread_current()->successful_wait_by_parent) return -1;
 
   return process_id;
 }
@@ -173,6 +188,9 @@ exec (const char *cmd_line)
 int
 wait (pid_t pid)
 {
+  if (pid == -1) {
+    return -1;
+  }
   tid_t thread_id = (tid_t) pid;
   return process_wait(thread_id);
 }

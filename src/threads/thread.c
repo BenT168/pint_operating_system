@@ -198,10 +198,6 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
-#ifdef USERPROG
-  add_child_thread (thread_current (), tid);
-#endif
-
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack'
      member cannot be observed. */
@@ -234,7 +230,12 @@ thread_create (const char *name, int priority,
   check_max_priority();
   intr_set_level (old_level);
 
-  sema_up (&t->load_sema);
+  #ifdef USERPROG
+  t->pid = (pid_t) tid;
+  t->parent = thread_current ();
+  add_child_thread(thread_current(), tid);
+
+  #endif
 
   return tid;
 }
@@ -317,9 +318,7 @@ get_tid_thread(tid_t tid) {
   for (e = list_begin (&all_list); e != list_end (&all_list);
     e = list_next (e)) {
     struct thread *t = list_entry (e, struct thread, allelem);
-    if (t->tid == tid) {
-      return t;
-    }
+    if (t->tid == tid) return t;
   }
   return NULL;
 }
@@ -329,20 +328,18 @@ get_tid_thread(tid_t tid) {
 void
 thread_exit (void)
 {
-  struct thread *cur = thread_current ();
-
   ASSERT (!intr_context ());
 
-#ifdef USERPROG
-  process_exit ();
+  #ifdef USERPROG
+    process_exit ();
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&cur->allelem);
-  cur->status = THREAD_DYING;
+  list_remove (&thread_current()->allelem);
+  thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
 }
@@ -562,18 +559,18 @@ init_thread (struct thread *t, const char *name, int priority)
     }
 
   /* TASK 2: Initialize all the struct and list for process running */
-#ifdef USERPROG
-  t->file = NULL;
-  t->child_load_success = false;
-  t->successful_wait_by_parent = false;
-  t->next_fd = 2;
-  sema_init (&t->load_sema, 0);
-  sema_init (&t->alive_sema, 0);
-  list_init (&t->child_procs);
-  list_init (&t->file_descriptors);
-  list_init (&t->pid_to_exit_status);
-  list_init (&t->file_list);
-#endif
+  #ifdef USERPROG
+      t->file = NULL;
+      t->child_load_success = false;
+      t->successful_wait_by_parent = false;
+      t->next_fd = 2;
+      sema_init (&t->load_sema, 0);
+      sema_init (&t->alive_sema, 0);
+      list_init (&t->child_procs);
+      list_init (&t->file_descriptors);
+      list_init (&t->pid_to_exit_status);
+      list_init (&t->file_list);
+  #endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -895,13 +892,15 @@ void load_avg_thread_mlfqs (void)
 
 }
 
+
+
 #ifdef USERPROG
 /* Adds thread with TID 'child_tid' to list of child threads of 't'. */
 void
 add_child_thread (struct thread *t, tid_t child_tid)
 {
   struct thread *child = get_tid_thread (child_tid);
-  child->parent        = t;
+  child->parent = t;
 
   list_push_back (&t->child_procs, &child->child_elem);
 }
