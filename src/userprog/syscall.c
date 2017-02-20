@@ -20,14 +20,19 @@
 
 static void syscall_handler (struct intr_frame *);
 
-static struct lock filesys_lock;
-static int fd_id = 2;
+/* A 'syscall_dispatcher' type is a generic function pointer. It is used to
+   call the appropriate system call function. A system call can have a
+   maximum of 3 arguments. */
+typedef int (*syscall_dispatcher) (intptr_t, intptr_t, intptr_t);
 
-void
-syscall_init (void)
-{
-  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-}
+/* Each system call is associated with a unique system call number, which in
+   turn is associated with a unique function implementing that system call.
+   Leveraging this bijection, the system call map is a mapping from
+   system call numbers to the functions that implement the corresponding system
+   call. */
+static syscall_dispatcher syscall_map[MAX_NUM_SYSCALLS];
+
+static struct lock filelock;
 
 /* Tasks 2 : TOCOMMENT */
 static void
@@ -36,29 +41,6 @@ check_memory_access(const void *ptr) {
       ! pagedir_get_page (thread_current () ->pagedir, ptr)){
         exit(-1);
       }
-}
-
-static void
-acquire_filesys_lock (void)
-{
-  lock_acquire (&filesys_lock);
-}
-
-static void
-release_filesys_lock (void)
-{
-  lock_release (&filesys_lock);
-}
-
-
-/* Tasks 2 : TOCOMMENT */
-int fd_add_file (struct file *file)
-{
-  struct fd_file *fd_desc = malloc(sizeof(struct fd_file));
-  fd_desc->file = file;
-  fd_desc->fd = fd_id++;
-  list_push_back(&thread_current()->file_list, &fd_desc->elem);
-  return fd_id;
 }
 
 /* Tasks 2 : TOCOMMENT */
@@ -75,150 +57,74 @@ struct fd_file* fd_get_file (int fd)
 	  }
    }
    exit(-1);
+   return NULL;
+}
+
+
+static void
+acquire_filelock (void)
+{
+  lock_acquire (&filelock);
+}
+
+static void
+release_filelock (void)
+{
+  lock_release (&filelock);
+}
+
+void
+syscall_init (void)
+{
+  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+
+  /* We need casts in order to preserve the actual argument and return types of
+     the system call procedures. */
+  syscall_map[SYS_HALT]     = (syscall_dispatcher) halt;
+  syscall_map[SYS_EXIT]     = (syscall_dispatcher) exit;
+  syscall_map[SYS_EXEC]     = (syscall_dispatcher) exec;
+  syscall_map[SYS_WAIT]     = (syscall_dispatcher) wait;
+  syscall_map[SYS_CREATE]   = (syscall_dispatcher) create;
+  syscall_map[SYS_REMOVE]   = (syscall_dispatcher) remove;
+  syscall_map[SYS_OPEN]     = (syscall_dispatcher) open;
+  syscall_map[SYS_FILESIZE] = (syscall_dispatcher) filesize;
+  syscall_map[SYS_READ]     = (syscall_dispatcher) read;
+  syscall_map[SYS_WRITE]    = (syscall_dispatcher) write;
+  syscall_map[SYS_SEEK]     = (syscall_dispatcher) seek;
+  syscall_map[SYS_TELL]     = (syscall_dispatcher) tell;
+  syscall_map[SYS_CLOSE]    = (syscall_dispatcher) close;
+
+  /* File system code is regarded as a critical section. */
+  lock_init (&filelock);
 }
 
 /* Tasks 2 : TOCOMMENT */
 static void
 syscall_handler (struct intr_frame *f)
 {
-  void *esp = f->esp;
-  uint32_t *eax = &f->eax;
+  check_memory_access (f->esp);
+  // arguments to system calls must be in user address space.
+  check_memory_access (f->esp + 4 * MAX_SYSCALL_ARGS);
 
-  check_memory_access (esp);
-  int syscall_num = *(int *) esp;
+  syscall_dispatcher syscall_procedure;
+  int syscall_num;
+  int syscall_ret_val;
 
-  switch (syscall_num) {
-    case SYS_HALT:
-      halt();
-      break;
-    case SYS_EXIT:
-      check_memory_access(esp + 4);
-      int exit_status = *(int *)(esp + 4);
-      exit (exit_status);
-      break;
-    case SYS_EXEC:
-      check_memory_access(esp + 4);
-      char *exec_file = *(char **)(esp + 4);
-      *eax = exec (exec_file);
-      break;
-    case SYS_WAIT:
-      check_memory_access(esp + 4);
-      pid_t pid = *(pid_t *)(esp + 4);
-      *eax = wait(pid);
-      break;
-    case SYS_CREATE:
-      check_memory_access(esp + 8);
-      const char *create_file = *(const char **)(esp + 4);
-      unsigned create_init_size = *(unsigned*) (esp + 8);
-      *eax = create (create_file, create_init_size);
-      break;
-    case SYS_REMOVE:
-      check_memory_access(esp + 4);
-      const char *remove_file = *(const char **)(esp + 4);
-      *eax = remove (remove_file);
-      break;
-    case SYS_OPEN:
-      check_memory_access(esp + 4);
-      const char *open_file = *(char **)(esp + 4);
-      *eax = open (open_file);
-      break;
-    case SYS_FILESIZE:
-      check_memory_access(esp + 4);
-      int filesize_fd = *(int *)(esp + 4);
-      *eax = filesize (filesize_fd);
-      break;
-    case SYS_READ:
-      check_memory_access(esp + 12);
-      int read_fd = *(int *)(esp + 4);
-      void *read_buffer = *(char **)(esp + 8);
-      unsigned read_size = *(unsigned *)(esp + 12);
-      *eax = read (read_fd, read_buffer, read_size);
-      break;
-    case SYS_WRITE:
-      check_memory_access(esp + 12);
-      int write_fd = *(int *)(esp + 4);
-      void *write_buffer = *(char **)(esp + 8);
-      unsigned write_size = *(unsigned *)(esp + 12);
-      *eax = write (write_fd, write_buffer, write_size);
-      break;
-    case SYS_SEEK:
-      check_memory_access(esp + 8);
-      int seek_fd = *(int *)(esp + 4);
-      unsigned seek_position = *(unsigned *)(esp + 8);
-      seek (seek_fd, seek_position);
-      break;
-    case SYS_TELL:
-      check_memory_access(esp + 4);
-      int tell_fd = *(int *)(esp + 4);
-      *eax = tell (tell_fd);
-      break;
-    case SYS_CLOSE:
-      check_memory_access(esp + 4);
-      int close_fd = *(int *)(esp + 4);
-      close(close_fd);
-      break;
-    default:
-      printf("System call number %d is invalid.\n", syscall_num);
+  int* stack_ptr = f->esp;
+  syscall_num = *stack_ptr;
 
-  }
-  /*
-  printf ("system call!\n");
-
-  uint32_t *args_pointer = f->esp;
-  uint32_t syscall_num = *args_pointer;
-
-  switch (syscall_num) {
-    case SYS_HALT:
-      halt();
-      break;
-    case SYS_EXIT:
-      exit(*(args_pointer+4));
-      break;
-    case SYS_EXEC:
-      f->eax = exec(*(args_pointer+4));
-      break;
-    case SYS_WAIT:
-      f->eax = wait(*(args_pointer+4));
-      break;
-    case SYS_CREATE:
-      f->eax = create(*(args_pointer+4), *(args_pointer+8));
-      break;
-    case SYS_REMOVE:
-      f->eax = remove(*(args_pointer+4));
-      break;
-    case SYS_OPEN:
-      f->eax = open(*(args_pointer+4));
-      break;
-    case SYS_FILESIZE:
-      f->eax = filesize(*(args_pointer+4));
-      break;
-    case SYS_READ:
-      f->eax = read(*(args_pointer+4), *(args_pointer+8), *(args_pointer+12));
-      break;
-    case SYS_WRITE:
-      f->eax = write(*(args_pointer+4), *(args_pointer+8), *(args_pointer+12));
-      break;
-    case SYS_SEEK:
-      seek(*(args_pointer+4), *(args_pointer+8));
-      break;
-    case SYS_TELL:
-      f->eax = tell(*(args_pointer+4));
-      break;
-    case SYS_CLOSE:
-      close(*(args_pointer+4));
-      break;
-    default:
-      printf("System call not available.\n");
-      break;
-  }
-  thread_exit ();
-  */
+  syscall_procedure = syscall_map[syscall_num];
+  syscall_ret_val = syscall_procedure (*(stack_ptr + 1),
+                                       *(stack_ptr + 2),
+                                       *(stack_ptr + 3));
+  f->eax = syscall_ret_val;
 }
 
 /* TASK 2: Terminates Pintos by calling shutdown_power_off() */
 void
-halt (void) {
-  shutdown_power_off();
+halt (void)
+{
+  shutdown_power_off ();
 }
 
 /* TASK 2: Terminates the current user program, sending its exit status
@@ -228,19 +134,16 @@ halt (void) {
 void
 exit (int status)
 {
-  struct thread *current = thread_current ();
+  struct thread *cur = thread_current ();
 
-  if (current -> parent) {
-    // Remove process from the list_elem
-    struct pid_exit_status *pid_exit_stat = malloc(sizeof(struct pid_exit_status));
-    pid_exit_stat->pid = current->pid;
-    pid_exit_stat->exit_status = status;
-    list_push_back (&current->parent->pid_to_exit_status,
-      &pid_exit_stat->elem);
-  }
+  cur->exit_status = status;
 
-  printf ("%s: exit(%d)\n", thread_current()->name, status);
-  thread_exit();
+  char *save_ptr;
+  char *proper_thread_name = strtok_r (cur->name, " ", &save_ptr);
+
+  printf ("%s: exit(%d)\n", proper_thread_name, status);
+
+  thread_exit ();
 }
 
 /* TASK 2: Runs the executable whose name is given in cmd line,
@@ -282,19 +185,25 @@ wait (pid_t pid)
 /* Tasks 2 : Creates a new file called file initially initial size bytes in
    size. Returns true if successful, false otherwise. */
 bool
-create (const char *file, unsigned initial_size) {
+create (const char *file, unsigned initial_size)
+{
   check_memory_access (file);
-  bool check_create = filesys_create(file, initial_size);
-  return check_create;
+  acquire_filelock ();
+  bool success = filesys_create (file, initial_size);
+  release_filelock ();
+  return success;
 }
 
 /* Tasks 2 : Deletes the file called file. Returns true if successful, false
    otherwise. */
 bool
-remove (const char *file) {
-  check_memory_access (file);
-  bool check_remove = filesys_remove(file);
-  return check_remove;
+remove (const char *file)
+{
+  check_memory_access(file);
+  acquire_filelock ();
+  bool success = filesys_remove (file);
+  release_filelock ();
+  return success;
 }
 
 /* TASK 2: Opens the file called file.
@@ -303,19 +212,17 @@ remove (const char *file) {
 int
 open (const char *file)
 {
-  if (!file) return -1;
+  check_memory_access ((void *) file);
 
-  check_memory_access (file);
-
-  acquire_filesys_lock ();
-  struct file *f = filesys_open(file);
-  release_filesys_lock ();
+  acquire_filelock ();
+  struct file *file_ptr = filesys_open (file);
+  release_filelock ();
 
   int fd;
-  if (!f)
+  if (!file_ptr)
     fd = FILE_OPEN_FAILURE;
   else
-    fd = thread_add_new_file (f);
+    fd = thread_add_new_file (file_ptr);
 
   return fd;
 }
@@ -323,21 +230,29 @@ open (const char *file)
 /* Tasks 2 : Returns the size, in bytes, of the file open as fd.
  */
 int
-filesize (int fd) {
-  struct fd_file* fd_file = fd_get_file(fd);
-  return file_length(fd_file->file);
+filesize (int fd)
+{
+  struct thread *cur = thread_current ();
+  struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
+
+  if (handle)
+    return file_length (handle->file);
+
+  // File with given file descriptor not found. Exit with status -1.
+  exit (-1);
 }
 
 /* Tasks 2 : Reads size bytes from the file open as fd into buffer. Returns the
    number of bytes actually read (0 at end of file), or -1 if the file could not
    be read (due to a condition other than end of file). */
 int
-read (int fd, void *buffer, unsigned size) {
+read (int fd, void *buffer, unsigned size)
+{
   struct thread *cur = thread_current ();
   int bytes_read = 0;
 
   // Verify buffer points to valid user address.
-  check_memory_access (buffer);
+  check_memory_access ((void *) buffer);
 
   if (fd == STDOUT_FILENO)
   {
@@ -347,7 +262,7 @@ read (int fd, void *buffer, unsigned size) {
   }
   else if (fd == STDIN_FILENO)
   {
-    acquire_filesys_lock ();
+    acquire_filelock ();
 
     uint8_t *u8t_buffer = (uint8_t *) buffer;
     for (unsigned i = 0; i < size; i++, bytes_read++)
@@ -356,7 +271,7 @@ read (int fd, void *buffer, unsigned size) {
       u8t_buffer[i] = input_getc ();
     }
 
-    release_filesys_lock ();
+    release_filelock ();
   }
   else
   {
@@ -369,9 +284,9 @@ read (int fd, void *buffer, unsigned size) {
       exit (bytes_read);
     }
 
-    acquire_filesys_lock ();
+    acquire_filelock ();
     bytes_read = file_read (handle->file, buffer, size);
-    release_filesys_lock ();
+    release_filelock ();
   }
   return bytes_read;
 }
@@ -385,7 +300,7 @@ write (int fd, const void *buffer, unsigned size)
   struct thread *cur = thread_current ();
   int bytes_written = 0;
 
-  check_memory_access (buffer);
+  check_memory_access ((void *) buffer);
 
   if (fd == STDIN_FILENO)
   {
@@ -395,7 +310,7 @@ write (int fd, const void *buffer, unsigned size)
   }
   else if (fd == STDOUT_FILENO)
   {
-    acquire_filesys_lock ();
+    acquire_filelock ();
 
     while (size > MAX_BUFFER_LENGTH)
     {
@@ -406,7 +321,7 @@ write (int fd, const void *buffer, unsigned size)
     putbuf ((char *) buffer, size);
     bytes_written += size;
 
-    release_filesys_lock ();
+    release_filelock ();
   }
   else
   {
@@ -419,9 +334,9 @@ write (int fd, const void *buffer, unsigned size)
       exit (bytes_written);
     }
 
-    acquire_filesys_lock ();
+    acquire_filelock ();
     bytes_written = file_write (handle->file, buffer, size);
-    release_filesys_lock ();
+    release_filelock ();
   }
   return bytes_written;
 }
@@ -429,7 +344,8 @@ write (int fd, const void *buffer, unsigned size)
 /* Tasks 2 : Changes the next byte to be read or written in open file fd to
    position, expressed in bytes from the beginning of the file. */
 void
-seek (int fd, unsigned position) {
+seek (int fd, unsigned position)
+{
   struct fd_file* fd_file = fd_get_file(fd);
   return file_seek(fd_file->file, position);
 }
@@ -437,7 +353,8 @@ seek (int fd, unsigned position) {
 /* Tasks 2 : Returns the position of the next byte to be read or written in open
    file fd, expressed in bytes from the beginning of the file. */
 unsigned
-tell (int fd) {
+tell (int fd)
+{
   struct fd_file* fd_file = fd_get_file(fd);
   return file_tell(fd_file->file);
 }
@@ -447,7 +364,8 @@ tell (int fd) {
    function for each one.
  */
 void
-close (int fd) {
+close (int fd)
+{
   struct fd_file* fd_file = fd_get_file(fd);
   list_remove(&fd_file->elem);
   file_close(fd_file->file);
