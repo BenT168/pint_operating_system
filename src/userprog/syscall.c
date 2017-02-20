@@ -43,6 +43,7 @@ check_memory_access(const void *ptr) {
       }
 }
 
+
 /* Tasks 2 : TOCOMMENT */
 struct fd_file* fd_get_file (int fd)
 {
@@ -145,6 +146,7 @@ exit (int status)
 
   thread_exit ();
 }
+
 
 /* TASK 2: Runs the executable whose name is given in cmd line,
    passing any given arguments, and returns the new process's program id (pid).
@@ -339,7 +341,9 @@ write (int fd, const void *buffer, unsigned size)
 void
 seek (int fd, unsigned position)
 {
-  struct fd_file* fd_file = fd_get_file(fd);
+  struct thread *cur = thread_current ();
+  struct file_handle* fd_file = thread_get_file_handle(&cur->file_list, fd);
+  //struct fd_file* fd_file = fd_get_file(fd);
   acquire_filelock ();
   file_seek(fd_file->file, position);
   release_filelock ();
@@ -350,7 +354,9 @@ seek (int fd, unsigned position)
 unsigned
 tell (int fd)
 {
-  struct fd_file* fd_file = fd_get_file(fd);
+  //struct fd_file* fd_file = fd_get_file(fd);
+  struct thread *cur = thread_current ();
+  struct file_handle* fd_file = thread_get_file_handle(&cur->file_list, fd);
   acquire_filelock ();
   unsigned sys_tell = file_tell(fd_file->file);
   release_filelock ();
@@ -365,7 +371,11 @@ tell (int fd)
 void
 close (int fd)
 {
-  struct fd_file* fd_file = fd_get_file(fd);
+  struct thread *cur = thread_current ();
+  struct file_handle* fd_file = thread_get_file_handle(&cur->file_list, fd);
+  if(fd_file == NULL) {
+    exit(-1);
+  }
 
   /* Removes file for thread's list of files,
   	 * closes the file,
