@@ -147,7 +147,7 @@ start_process (void *file_name_)
   char *save_ptr;
   char *exec_file_name = strtok_r (file_name, " ", &save_ptr);
   elf_load_success = thread_current()->parent->child_load_success
-                   = load (exec_file_name, &if_.eip, &if_.esp);
+                   = load (file_name, &if_.eip, &if_.esp);
 
   if (elf_load_success)
   {

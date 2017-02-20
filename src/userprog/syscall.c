@@ -139,7 +139,7 @@ exit (int status)
   cur->exit_status = status;
 
   char *save_ptr;
-  char *proper_thread_name = strtok_r (cur->name, " ", &save_ptr);
+  char *proper_thread_name = (char *) strtok_r (cur->name, " ", &save_ptr);
 
   printf ("%s: exit(%d)\n", proper_thread_name, status);
 
@@ -153,19 +153,13 @@ exit (int status)
 pid_t
 exec (const char *cmd_line)
 {
+  if (!cmd_line) exit(-1);
   check_memory_access(cmd_line);
-  tid_t thread_id = process_execute(cmd_line);
-  pid_t process_id = (pid_t) thread_id;
 
-  if (thread_id == TID_ERROR) return -1;
-
-  struct thread* proc_thread = get_tid_thread(thread_id);
-
-  if(proc_thread) { // a valid pointer
-    sema_down(&proc_thread->load_sema);
-  }
-
-  if (!thread_current ()->child_load_success) return -1;
+   /* Acquire lock because of call to thread_create */
+	acquire_filelock ();
+  pid_t process_id = (pid_t) process_execute(cmd_line);
+  release_filelock ();
 
   return process_id;
 }
@@ -177,7 +171,6 @@ exec (const char *cmd_line)
 int
 wait (pid_t pid)
 {
-  if (pid == -1) return -1;
   tid_t thread_id = (tid_t) pid;
   return process_wait(thread_id);
 }
@@ -347,7 +340,9 @@ void
 seek (int fd, unsigned position)
 {
   struct fd_file* fd_file = fd_get_file(fd);
-  return file_seek(fd_file->file, position);
+  acquire_filelock ();
+  file_seek(fd_file->file, position);
+  release_filelock ();
 }
 
 /* Tasks 2 : Returns the position of the next byte to be read or written in open
@@ -356,7 +351,11 @@ unsigned
 tell (int fd)
 {
   struct fd_file* fd_file = fd_get_file(fd);
-  return file_tell(fd_file->file);
+  acquire_filelock ();
+  unsigned sys_tell = file_tell(fd_file->file);
+  release_filelock ();
+
+  return sys_tell;
 }
 
 /* Tasks 2 : Closes file descriptor fd. Exiting or terminating a process
@@ -367,7 +366,15 @@ void
 close (int fd)
 {
   struct fd_file* fd_file = fd_get_file(fd);
+
+  /* Removes file for thread's list of files,
+  	 * closes the file,
+  	 * and frees memory calloced for struct sys_file */
+  acquire_filelock ();
+
   list_remove(&fd_file->elem);
   file_close(fd_file->file);
   free(fd_file);
+
+  release_filelock ();
 }
