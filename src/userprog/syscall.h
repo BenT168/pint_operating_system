@@ -6,17 +6,16 @@
 #include "userprog/process.h"
 #include "lib/user/syscall.h"
 
-void syscall_init (void);
-
 /* Tasks 2 : TOCOMMENT */
 struct fd_file {
   struct file *file;
-  int fd;
-  struct list_elem elem;
+  int fd;                       /* Corresponding fd number */
+  struct list_elem elem;		/* File elem for file lists */
 };
 
 /* Tasks 2 and later. */
-struct fd_file* fd_get_file (int fd);
+void syscall_init (void);
+
 void halt (void);
 void exit (int status);
 pid_t exec (const char *file);

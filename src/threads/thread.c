@@ -230,11 +230,16 @@ thread_create (const char *name, int priority,
   check_max_priority();
   intr_set_level (old_level);
 
+  /* TASK 2 : Adds thread with tid to list of child threads of
+     thread_current().   */
   #ifdef USERPROG
   t->pid = (pid_t) tid;
   t->parent = thread_current ();
-  add_child_thread(thread_current(), tid);
 
+  struct thread *child = get_tid_thread (tid);
+  child->parent = thread_current ();
+
+  list_push_back (&thread_current()->child_procs, &child->child_elem);
   #endif
 
   return tid;
@@ -562,7 +567,6 @@ init_thread (struct thread *t, const char *name, int priority)
   #ifdef USERPROG
       t->file = NULL;
       t->child_load_success = false;
-      t->successful_wait_by_parent = false;
       t->next_fd = 2;
       sema_init (&t->load_sema, 0);
       sema_init (&t->alive_sema, 0);
@@ -895,17 +899,7 @@ void load_avg_thread_mlfqs (void)
 
 
 #ifdef USERPROG
-/* Adds thread with TID 'child_tid' to list of child threads of 't'. */
-void
-add_child_thread (struct thread *t, tid_t child_tid)
-{
-  struct thread *child = get_tid_thread (child_tid);
-  child->parent = t;
-
-  list_push_back (&t->child_procs, &child->child_elem);
-}
-
-/* Adds new file to list of files opened by the running thread. Returns
+/* TASK 2 : Adds new file to list of files opened by the running thread. Returns
    the file descriptor of the new file. */
 int
 thread_add_new_file (struct file *file)
@@ -921,7 +915,8 @@ thread_add_new_file (struct file *file)
   return handle->fd;
 }
 
-/* Retrieves file handle with the given file descriptor from the list of
+/* TASK 2:
+   Retrieves file handle with the given file descriptor from the list of
    file handles 'file_list'. If the handle is not present, this function
    returns null. Every time a file is opened (even the same file), a new
    handle is created (in addition to existing ones for already opened

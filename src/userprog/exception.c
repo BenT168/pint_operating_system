@@ -153,15 +153,12 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if(user && (!is_user_vaddr(fault_addr) || fault_addr <= 0x08048000)) {
-   exit(-1);
- } else if (!user && is_user_vaddr(fault_addr)){
-   exit(-1);
-}
-
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
+  printf("page falt called exit(-1), %d\n",thread_current()->tid);
+  exit(-1);
+  
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",

@@ -18,6 +18,9 @@
 #define MAX_SYSCALL_ARGS 3
 #define FILE_OPEN_FAILURE -1
 
+static void check_memory_access(const void *);
+static void acquire_filelock (void);
+static void release_filelock (void);
 static void syscall_handler (struct intr_frame *);
 
 /* A 'syscall_dispatcher' type is a generic function pointer. It is used to
@@ -43,37 +46,21 @@ check_memory_access(const void *ptr) {
   }
 }
 
-
 /* Tasks 2 : TOCOMMENT */
-struct fd_file* fd_get_file (int fd)
-{
-  struct thread *t = thread_current();
-  struct list_elem *e;
-
-  for (e = list_begin (&t->file_list); e != list_end (&t->file_list);
-       e = list_next (e)) {
-    struct fd_file *fd_file = list_entry (e, struct fd_file, elem);
-      if (fd == fd_file->fd) {
-	      return fd_file;
-	  }
-   }
-   exit(-1);
-   return NULL;
-}
-
-
 static void
 acquire_filelock (void)
 {
   lock_acquire (&filelock);
 }
 
+/* Tasks 2 : TOCOMMENT */
 static void
 release_filelock (void)
 {
   lock_release (&filelock);
 }
 
+/* Tasks 2 : TOCOMMENT */
 void
 syscall_init (void)
 {
@@ -104,7 +91,7 @@ static void
 syscall_handler (struct intr_frame *f)
 {
   check_memory_access (f->esp);
-  // arguments to system calls must be in user address space.
+  /* arguments to system calls must be in user address space. */
   check_memory_access (f->esp + 4 * MAX_SYSCALL_ARGS);
 
   syscall_dispatcher syscall_procedure;
@@ -137,6 +124,8 @@ exit (int status)
 {
   struct thread *cur = thread_current ();
 
+  /* Send the information about the child's exit status to the parent ( if
+    one exists) before this thread dies */
   if(cur->parent != NULL) {
     struct pid_exit_status* pid_exit_status = malloc(sizeof(struct pid_exit_status));
     pid_exit_status->pid = cur->pid;
@@ -161,7 +150,6 @@ exit (int status)
 pid_t
 exec (const char *cmd_line)
 {
-
   check_memory_access(cmd_line);
   tid_t thread_id = process_execute(cmd_line);
   pid_t process_id = (pid_t) thread_id;
@@ -170,13 +158,12 @@ exec (const char *cmd_line)
 
   struct thread* proc_thread = get_tid_thread(thread_id);
 
-  if(proc_thread) { // a valid pointer
+  if(proc_thread) {
     sema_down(&proc_thread->load_sema);
   }
 
+  /* Return -1 if the program cannot load or run */
   if (!thread_current ()->child_load_success) return -1;
-
-  //if(!thread_current()->successful_wait_by_parent) return -1;
 
   return process_id;
 }
@@ -188,9 +175,7 @@ exec (const char *cmd_line)
 int
 wait (pid_t pid)
 {
-  if (pid == -1) {
-    return -1;
-  }
+  if (pid == -1) return -1;
   tid_t thread_id = (tid_t) pid;
   return process_wait(thread_id);
 }
@@ -248,10 +233,9 @@ filesize (int fd)
   struct thread *cur = thread_current ();
   struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
 
-  if (handle)
-    return file_length (handle->file);
+  if (handle) return file_length (handle->file);
 
-  // File with given file descriptor not found. Exit with status -1.
+  /* File with given file descriptor not found. Exit with status -1. */
   exit (-1);
 }
 
@@ -264,12 +248,12 @@ read (int fd, void *buffer, unsigned size)
   struct thread *cur = thread_current ();
   int bytes_read = 0;
 
-  // Verify buffer points to valid user address.
+  /* Verify buffer points to valid user address. */
   check_memory_access ((void *) buffer);
 
   if (fd == STDOUT_FILENO)
   {
-    // Attempt to read from standard output.
+    /* Attempt to read from standard output. */
     bytes_read = -1;
     exit (bytes_read);
   }
@@ -280,7 +264,7 @@ read (int fd, void *buffer, unsigned size)
     uint8_t *u8t_buffer = (uint8_t *) buffer;
     for (unsigned i = 0; i < size; i++, bytes_read++)
     {
-      // Read one byte at a time.
+      /* Read one byte at a time. */
       u8t_buffer[i] = input_getc ();
     }
 
@@ -288,7 +272,7 @@ read (int fd, void *buffer, unsigned size)
   }
   else
   {
-    // Get file handle if it exists.
+    /* Get file handle if it exists. */
     struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
 
     if (!handle)
@@ -317,7 +301,7 @@ write (int fd, const void *buffer, unsigned size)
 
   if (fd == STDIN_FILENO)
   {
-    // Attempt to write to standard input.
+    /* Attempt to write to standard input. */
     bytes_written = -1;
     exit (bytes_written);
   }
@@ -338,7 +322,7 @@ write (int fd, const void *buffer, unsigned size)
   }
   else
   {
-    // Get file handle if it exists.
+    /* Get file handle if it exists. */
     struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
 
     if (!handle)
@@ -361,7 +345,7 @@ seek (int fd, unsigned position)
 {
   struct thread *cur = thread_current ();
   struct file_handle* fd_file = thread_get_file_handle(&cur->file_list, fd);
-  //struct fd_file* fd_file = fd_get_file(fd);
+
   acquire_filelock ();
   file_seek(fd_file->file, position);
   release_filelock ();
@@ -372,9 +356,9 @@ seek (int fd, unsigned position)
 unsigned
 tell (int fd)
 {
-  //struct fd_file* fd_file = fd_get_file(fd);
   struct thread *cur = thread_current ();
   struct file_handle* fd_file = thread_get_file_handle(&cur->file_list, fd);
+
   acquire_filelock ();
   unsigned sys_tell = file_tell(fd_file->file);
   release_filelock ();
@@ -391,18 +375,11 @@ close (int fd)
 {
   struct thread *cur = thread_current ();
   struct file_handle* fd_file = thread_get_file_handle(&cur->file_list, fd);
-  if(fd_file == NULL) {
-    exit(-1);
-  }
+  if(fd_file == NULL) exit(-1);
 
-  /* Removes file for thread's list of files,
-  	 * closes the file,
-  	 * and frees memory calloced for struct sys_file */
   acquire_filelock ();
-
-  list_remove(&fd_file->elem);
-  file_close(fd_file->file);
-  free(fd_file);
-
+  list_remove(&fd_file->elem); /* Removes file for thread's list of files */
+  file_close(fd_file->file);   /* closes the file */
+  free(fd_file);               /* frees memory calloced for struct sys_file */
   release_filelock ();
 }

@@ -136,12 +136,6 @@ struct thread
     struct list_elem child_elem;      /* List element for 'child_procs' list as
                                          a processes (single-threaded) can be
                                          both child and parent processes. */
-
-
-    bool successful_wait_by_parent;   /* A thread can only have one parent. So
-                                         we use this member to check whether
-                                         this thread's parent has successfully
-                                         waited on it. */
     int exit_status;                  /* exit status of thread */
 	  struct list file_list;            /* File list used for file system calls*/
 	  int fd;
@@ -238,7 +232,6 @@ void load_avg_thread_mlfqs (void);
 
 /* TASK 2 */
 struct thread *get_tid_thread(tid_t tid);
-void add_child_thread (struct thread *t, tid_t child_tid);
 int thread_add_new_file (struct file *file);
 struct file_handle* thread_get_file_handle (struct list *file_list, int fd);
 

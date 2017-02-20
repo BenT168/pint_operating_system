@@ -20,11 +20,9 @@
 #include "threads/vaddr.h"
 
 #define MAX_ARGS 50
-#define FORK_FAILURE -1
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-//static void setup_process_stack (void **esp_addr, char *only_args, char *exec_file_name);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -50,24 +48,26 @@ process_execute (const char *file_name)
  return tid;
 }
 
-
-
-
 /* TASK 2 : Parsing arguments from filename into a string,
    returns the size  of argv or -1 if failure. */
-
 static int parse_args (char **argv, char *file_name) {
   char *saveptr;
   char *arg = strtok_r (file_name, " ", &saveptr);
   int index = 0;
   int alloc_byte = 0;
   while (arg != NULL) {
+    /* Making space for argument. */
     int len = strlen(arg);
+
+    /* Check if we have gone over limit */
     if (alloc_byte + len > PGSIZE)
       return -1;
 
+    /* Counting arguments. */
     *(argv + index) = arg;
     alloc_byte += len;
+
+    /* Increment token to next word. */
     arg = strtok_r (NULL, " ", &saveptr);
     ++index;
   }
@@ -170,20 +170,20 @@ int
 process_wait (tid_t child_tid)
 {
   /* Processes are single-threaded and PintOS user kernel threads. So we can
-     use a single thread to point to a newly created child process. */
+   use a single thread to point to a newly created child process. */
   struct thread *child = get_tid_thread(child_tid);
 
-  /* TASK 2 : TOCOMMENT */
+/* TASK 2 : Semaphore will become unblocked when thread 'child' dies. */
   if (child) {
     sema_down(&child->alive_sema);
   }
 
-  /* TASK 2 : TODO TOCOMMENT */
   struct list_elem *e = list_begin (&thread_current ()->pid_to_exit_status);
 
   for (; e != list_end (&thread_current ()->pid_to_exit_status); e = list_next(e) ){
     struct pid_exit_status *pes = list_entry (e, struct pid_exit_status, elem);
 
+  /* TASK 2 : Free 'pid_to_exit_status' list to prevent memory leak */
     if(pes->pid == (pid_t) child_tid) {
       int exit_status = pes->exit_status;
       list_remove(e);
@@ -194,14 +194,14 @@ process_wait (tid_t child_tid)
   return -1;
 }
 
-/* Free the current process's resources. */
+//* Free the current process's resources. */
 void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  /* TASK 2 : TOCOMMENT */
+  /* TASK 2 : Frees any frame that are only used by this current thread  */
   struct list_elem *e = list_begin (&cur-> child_procs);
 
   for(; e != list_end (&cur->child_procs) ; e = list_next(e)) {
@@ -209,6 +209,7 @@ process_exit (void)
     child->parent = NULL;
   }
 
+  /* TASK 2 : close the file descriptor to prevent memory leak  */
   struct list *file_descs = &cur->file_descriptors;
 
   while (!list_empty (file_descs)) {
@@ -216,10 +217,12 @@ process_exit (void)
     close (fd_file->fd);
   }
 
+  /* TASK 2 : Remove the list of child processing if parent list exists  */
   if (cur->parent) {
     list_remove (&cur->child_elem);
   }
 
+  /* TASK 2 : Allow the file to be written and closed if file exists  */
   if (cur->file) {
     file_allow_write(cur->file);
     file_close (cur->file);
