@@ -119,10 +119,10 @@ struct thread
                                          process run */
     bool child_load_success;          /* True if the last process executed
                                          by this thread load successfully */
-    struct semaphore load_sema;       /* Semaphore used to wait until a child
-                                         process has loaded*/
-    struct semaphore alive_sema;      /* Semaphore used to wait until a child
-                                         process has died */
+    struct semaphore load_sema;       /* Semaphore down when this thread is
+                                         loading. */
+    struct semaphore alive_sema;      /* Semaphore down when this thread is
+                                         alive. */
     struct thread *parent;            /* Thread of parent process ('null' if no
                                          parent process exists.) */
     struct list child_procs;          /* List of threads representing child
@@ -133,15 +133,17 @@ struct thread
     struct list pid_to_exit_status;   /* Mappings list from process identification
                                          to the corresponding process' exit
                                          status. */
-    struct list file_list;            /* File list used for file system calls*/
     struct list_elem child_elem;      /* List element for 'child_procs' list as
                                          a processes (single-threaded) can be
                                          both child and parent processes. */
+
+
     bool successful_wait_by_parent;   /* A thread can only have one parent. So
                                          we use this member to check whether
                                          this thread's parent has successfully
                                          waited on it. */
     int exit_status;                  /* exit status of thread */
+	  struct list file_list;            /* File list used for file system calls*/
 	  int fd;
     int next_fd;                      /* Next file descriptor to use. */
 #endif
@@ -172,7 +174,6 @@ struct pid_exit_status
     struct list_elem elem;
   };
 
-  /* TASK 2: TOCOMMENT */
 struct file_handle
   {
     int fd;                   /* File descriptor of file. */
@@ -236,7 +237,8 @@ void cpu_thread_mlfqs (struct thread *t, void *aux UNUSED);
 void load_avg_thread_mlfqs (void);
 
 /* TASK 2 */
-struct thread* get_tid_thread(tid_t tid);
+struct thread *get_tid_thread(tid_t tid);
+void add_child_thread (struct thread *t, tid_t child_tid);
 int thread_add_new_file (struct file *file);
 struct file_handle* thread_get_file_handle (struct list *file_list, int fd);
 
