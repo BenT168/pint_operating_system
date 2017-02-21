@@ -203,7 +203,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  /* TASK 2 : Frees any frame that are only used by this current thread  */
+  /* TASK 2: Frees any frame that are only used by this current thread  */
   struct list_elem *e = list_begin (&cur-> child_procs);
 
   for(; e != list_end (&cur->child_procs) ; e = list_next(e)) {
@@ -211,7 +211,7 @@ process_exit (void)
     child->parent = NULL;
   }
 
-  /* TASK 2 : close the file descriptor to prevent memory leak  */
+  /* TASK 2: close the file descriptor to prevent memory leak  */
   struct list *file_descs = &cur->file_descriptors;
 
   while (!list_empty (file_descs)) {
@@ -219,12 +219,12 @@ process_exit (void)
     close (fd_file->fd);
   }
 
-  /* TASK 2 : Remove the list of child processing if parent list exists  */
+  /* TASK 2: Remove the list of child processing if parent list exists  */
   if (cur->parent) {
     list_remove (&cur->child_elem);
   }
 
-  /* TASK 2 : Allow the file to be written and closed if file exists  */
+  /* TASK 2: Allow the file to be written and closed if file exists  */
   if (cur->file) {
     file_allow_write(cur->file);
     file_close (cur->file);
@@ -235,7 +235,7 @@ process_exit (void)
   pd = cur->pagedir;
   if (pd != NULL)
     {
-      /* TASK 2 : unblock parent thread */
+      /* TASK 2: unblock parent thread */
       sema_up (&cur->alive_sema);
 
       /* Correct ordering here is crucial.  We must set

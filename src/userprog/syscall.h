@@ -6,7 +6,7 @@
 #include "userprog/process.h"
 #include "lib/user/syscall.h"
 
-/* Tasks 2 */
+/* Task 2 */
 struct fd_file {
   struct file *file;
   int fd;                       /* Corresponding fd number */

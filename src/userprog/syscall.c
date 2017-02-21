@@ -37,7 +37,11 @@ static syscall_dispatcher syscall_map[MAX_NUM_SYSCALLS];
 
 static struct lock filelock;
 
-/* Tasks 2 : TOCOMMENT */
+/* TASK 2: Checks that the pointer is legal:
+     - checks that it is not a null pointer;
+     - checks that it is pointing to a user virtual address and not kernel;
+     - checks that it is not unmapped;
+   If any of these conditions is false it exits with code -1. */
 static void
 check_memory_access(const void *ptr) {
   if (ptr == NULL || !is_user_vaddr (ptr) ||
@@ -46,21 +50,21 @@ check_memory_access(const void *ptr) {
   }
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* TASK 2: Acquires lock over file system */
 static void
 acquire_filelock (void)
 {
   lock_acquire (&filelock);
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* TASK 2: Releases lock from file system */
 static void
 release_filelock (void)
 {
   lock_release (&filelock);
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* TASK 2: TOCOMMENT */
 void
 syscall_init (void)
 {
@@ -86,7 +90,8 @@ syscall_init (void)
   lock_init (&filelock);
 }
 
-/* Tasks 2 : TOCOMMENT */
+/* TASK 2: This function parses the input system call code and redirects
+   to the relevant system call function. */
 static void
 syscall_handler (struct intr_frame *f)
 {
@@ -180,7 +185,7 @@ wait (pid_t pid)
   return process_wait(thread_id);
 }
 
-/* Tasks 2 : Creates a new file called file initially initial size bytes in
+/* TASK 2: Creates a new file called file initially initial size bytes in
    size. Returns true if successful, false otherwise. */
 bool
 create (const char *file, unsigned initial_size)
@@ -192,7 +197,7 @@ create (const char *file, unsigned initial_size)
   return success;
 }
 
-/* Tasks 2 : Deletes the file called file. Returns true if successful, false
+/* TASK 2: Deletes the file called file. Returns true if successful, false
    otherwise. */
 bool
 remove (const char *file)
@@ -225,7 +230,7 @@ open (const char *file)
   return fd;
 }
 
-/* Tasks 2 : Returns the size, in bytes, of the file open as fd.
+/* TASK 2: Returns the size, in bytes, of the file open as fd.
  */
 int
 filesize (int fd)
@@ -239,7 +244,7 @@ filesize (int fd)
   exit (-1);
 }
 
-/* Tasks 2 : Reads size bytes from the file open as fd into buffer. Returns the
+/* TASK 2: Reads size bytes from the file open as fd into buffer. Returns the
    number of bytes actually read (0 at end of file), or -1 if the file could not
    be read (due to a condition other than end of file). */
 int
@@ -350,7 +355,7 @@ write (int fd, const void *buffer, unsigned size)
   return bytes_written;
 }
 
-/* Tasks 2 : Changes the next byte to be read or written in open file fd to
+/* TASK 2: Changes the next byte to be read or written in open file fd to
    position, expressed in bytes from the beginning of the file. */
 void
 seek (int fd, unsigned position)
@@ -363,7 +368,7 @@ seek (int fd, unsigned position)
   release_filelock ();
 }
 
-/* Tasks 2 : Returns the position of the next byte to be read or written in open
+/* TASK 2: Returns the position of the next byte to be read or written in open
    file fd, expressed in bytes from the beginning of the file. */
 unsigned
 tell (int fd)
@@ -378,7 +383,7 @@ tell (int fd)
   return sys_tell;
 }
 
-/* Tasks 2 : Closes file descriptor fd. Exiting or terminating a process
+/* TASK 2: Closes file descriptor fd. Exiting or terminating a process
    implicitly closes all its open file descriptors, as if by calling this
    function for each one.
  */
