@@ -277,6 +277,7 @@ read (int fd, void *buffer, unsigned size)
   }
   else
   {
+    acquire_filelock ();
     /* Get file handle if it exists. */
     struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
 
@@ -286,7 +287,6 @@ read (int fd, void *buffer, unsigned size)
       exit (bytes_read);
     }
 
-    acquire_filelock ();
     int l = file_length(handle->file);
     bytes_read = file_read (handle->file, buffer, size);
     int i_size = size;
@@ -326,15 +326,19 @@ write (int fd, const void *buffer, unsigned size)
   {
     acquire_filelock ();
 
-    while (size > MAX_BUFFER_LENGTH)
-    {
-      putbuf ((char *) (buffer + bytes_written), MAX_BUFFER_LENGTH);
-      bytes_written += MAX_BUFFER_LENGTH;
-      size -= MAX_BUFFER_LENGTH;
+    if (size < 200) {
+      putbuf(buffer, size);
+      bytes_written = size;
+    } else {
+      while (size > MAX_BUFFER_LENGTH)
+      {
+        putbuf ((char *) (buffer + bytes_written), MAX_BUFFER_LENGTH);
+        bytes_written += MAX_BUFFER_LENGTH;
+        size -= MAX_BUFFER_LENGTH;
+      }
+      putbuf ((char *) (buffer + bytes_written), size);
+      bytes_written += size;
     }
-    putbuf ((char *) buffer, size);
-    bytes_written += size;
-
     release_filelock ();
   }
   else

@@ -445,10 +445,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
+  t->file = file;
+  file_deny_write (file);
+  goto success_done;
 
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+ success_done:
   return success;
 }
 
