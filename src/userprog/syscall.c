@@ -282,8 +282,20 @@ read (int fd, void *buffer, unsigned size)
     }
 
     acquire_filelock ();
+    int l = file_length(handle->file);
     bytes_read = file_read (handle->file, buffer, size);
-    release_filelock ();
+    int i_size = size;
+    if (bytes_read == i_size) {
+					release_filelock ();
+					return bytes_read;
+				} else if (bytes_read == l && bytes_read != i_size) {
+					release_filelock ();;
+					return 0;
+				} else {
+					release_filelock ();;
+					exit(-1);
+					return -1;
+				}
   }
   return bytes_read;
 }

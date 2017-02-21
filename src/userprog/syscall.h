@@ -6,11 +6,11 @@
 #include "userprog/process.h"
 #include "lib/user/syscall.h"
 
-/* Tasks 2 : TOCOMMENT */
+/* Tasks 2 */
 struct fd_file {
   struct file *file;
   int fd;                       /* Corresponding fd number */
-  struct list_elem elem;		/* File elem for file lists */
+  struct list_elem elem;		    /* File elem for file lists */
 };
 
 /* Tasks 2 and later. */
