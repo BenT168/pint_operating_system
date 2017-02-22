@@ -204,7 +204,7 @@ process_exit (void)
   uint32_t *pd;
 
   /* TASK 2: Frees any frame that are only used by this current thread  */
-  struct list_elem *e = list_begin (&cur-> child_procs);
+  struct list_elem *e = list_begin (&cur->child_procs);
 
   for(; e != list_end (&cur->child_procs) ; e = list_next(e)) {
     struct thread *child = list_entry (e, struct thread, elem);
