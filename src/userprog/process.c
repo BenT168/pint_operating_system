@@ -204,7 +204,7 @@ process_exit (void)
   uint32_t *pd;
 
   /* TASK 2: Frees any frame that are only used by this current thread  */
-  struct list_elem *e = list_begin (&cur-> child_procs);
+  struct list_elem *e = list_begin (&cur->child_procs);
 
   for(; e != list_end (&cur->child_procs) ; e = list_next(e)) {
     struct thread *child = list_entry (e, struct thread, elem);
@@ -215,7 +215,7 @@ process_exit (void)
   struct list *file_descs = &cur->file_descriptors;
 
   while (!list_empty (file_descs)) {
-    struct fd_file *fd_file = list_entry ( list_begin (file_descs), struct fd_file, elem);
+    struct file_handle *fd_file = list_entry ( list_begin (file_descs), struct file_handle, elem);
     close (fd_file->fd);
   }
 
