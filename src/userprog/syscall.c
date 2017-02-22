@@ -180,6 +180,7 @@ exec (const char *cmd_line)
 int
 wait (pid_t pid)
 {
+  if (pid == -1) return -1;
   tid_t thread_id = (tid_t) pid;
   return process_wait(thread_id);
 }
@@ -395,7 +396,8 @@ close (int fd)
 {
   struct thread *cur = thread_current ();
   struct file_handle* fd_file = thread_get_file_handle(&cur->file_list, fd);
-
+  if (!fd_file) return -1;
+  
   acquire_filelock ();
   list_remove(&fd_file->elem); /* Removes file for thread's list of files */
   file_close(fd_file->file);   /* closes the file */
