@@ -137,7 +137,6 @@ struct thread
                                          a processes (single-threaded) can be
                                          both child and parent processes. */
     int exit_status;                  /* exit status of thread */
-	  int fd;
     int next_fd;                      /* Next file descriptor to use. */
 #endif
 
@@ -159,19 +158,24 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
-  /* TASK 2: Struct for pid exit status. */
+/* TASK 2: Struct for process identification's exit status. */
 struct pid_exit_status
   {
-    pid_t pid;
-    int exit_status;
-    struct list_elem elem;
+    pid_t pid;                    /* Unique process identification */
+    int exit_status;              /* exit status of thread */
+    struct list_elem elem;        /* Used to put the struct in thread list's
+                                     return status */
   };
 
+
+/* TASK 2 : File handler structure to enable storing and searching of files by
+   reference to its file descriptor number */
 struct file_handle
   {
     int fd;                   /* File descriptor of file. */
-    struct file *file;        /* Pointer to file struct. */
-    struct list_elem elem;    /* List element. */
+    struct file *file;        /* File opened corresponding to this file handler */
+    struct list_elem elem;    /* Element of list of file handler which is held by
+                                 each thread */
   };
 
 

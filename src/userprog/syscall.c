@@ -24,18 +24,18 @@ static void acquire_filelock (void);
 static void release_filelock (void);
 static void syscall_handler (struct intr_frame *);
 
-/* A 'syscall_dispatcher' type is a generic function pointer. It is used to
-   call the appropriate system call function. A system call can have a
+/* TASK 2: A 'syscall_dispatcher' type is a generic function pointer. It is
+   used to call the appropriate system call function. A system call can have a
    maximum of 3 arguments. */
 typedef int (*syscall_dispatcher) (intptr_t, intptr_t, intptr_t);
 
-/* Each system call is associated with a unique system call number, which in
-   turn is associated with a unique function implementing that system call.
-   Leveraging this bijection, the system call map is a mapping from
-   system call numbers to the functions that implement the corresponding system
-   call. */
+/* TASK 2: Each system call is associated with a unique system call number,
+   which in turn is associated with a unique function implementing that system
+   call. Leveraging this bijection, the system call map is a mapping from system
+   call numbers to the functions that implement the corresponding system call.*/
 static syscall_dispatcher syscall_map[MAX_NUM_SYSCALLS];
 
+/* TASK 2: File system lock, ensuring access to only one file at a time */
 static struct lock filelock;
 
 /* TASK 2: Checks that the pointer is legal:
@@ -230,8 +230,7 @@ open (const char *file)
   return fd;
 }
 
-/* TASK 2: Returns the size, in bytes, of the file open as fd.
- */
+/* TASK 2: Returns the size, in bytes, of the file open as fd. */
 int
 filesize (int fd)
 {
