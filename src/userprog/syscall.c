@@ -2,6 +2,7 @@
 #include "userprog/pagedir.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include "lib/string.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
@@ -64,7 +65,7 @@ release_filelock (void)
   lock_release (&filelock);
 }
 
-/* TASK 2: TOCOMMENT */
+/* TASK 2: system call initialiser */
 void
 syscall_init (void)
 {
@@ -129,7 +130,7 @@ exit (int status)
 {
   struct thread *cur = thread_current ();
 
-  /* Send the information about the child's exit status to the parent ( if
+  /* Send the information about the child's exit status to the parent (if
     one exists) before this thread dies */
   if(cur->parent != NULL) {
     struct pid_exit_status* pid_exit_status = malloc(sizeof(struct pid_exit_status));
@@ -143,7 +144,7 @@ exit (int status)
   char *proper_thread_name = (char *) strtok_r (cur->name, " ", &save_ptr);
 
   printf ("%s: exit(%d)\n", proper_thread_name, status);
-
+  
   thread_exit ();
 }
 
