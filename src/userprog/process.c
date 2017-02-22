@@ -103,11 +103,13 @@ start_process (void *file_name_)
 
   file_name = *args;
   strlcpy(thread_current()->name, file_name, 15);
-  success = thread_current()->parent->child_load_success
-          = load (file_name, &if_.eip, &if_.esp);
+  success = load (file_name, &if_.eip, &if_.esp);
 
-  /* If load failed, quit. */
-  sema_up (&thread_current()->load_sema);
+  if (thread_current()->parent != NULL) {
+    thread_current()->parent->child_load_success = success;
+      /* If load failed, quit. */
+    sema_up (&thread_current()->load_sema);
+  }
 
   if (!success) {
     palloc_free_page (file_name);
@@ -212,7 +214,7 @@ process_exit (void)
   }
 
   /* TASK 2: close the file descriptor to prevent memory leak  */
-  struct list *file_descs = &cur->file_descriptors;
+  struct list *file_descs = &cur->file_list;
 
   while (!list_empty (file_descs)) {
     struct file_handle *fd_file = list_entry ( list_begin (file_descs), struct file_handle, elem);

@@ -572,9 +572,8 @@ init_thread (struct thread *t, const char *name, int priority)
       sema_init (&t->load_sema, 0);
       sema_init (&t->alive_sema, 0);
       list_init (&t->child_procs);
-      list_init (&t->file_descriptors);
-      list_init (&t->pid_to_exit_status);
       list_init (&t->file_list);
+      list_init (&t->pid_to_exit_status);
   #endif
 
   old_level = intr_disable ();

@@ -128,7 +128,7 @@ struct thread
     struct list child_procs;          /* List of threads representing child
                                          processes that have been spawned by
                                          this thread's embedding process. */
-    struct list file_descriptors;     /* List of file descriptors that the
+    struct list file_list;            /* List of file descriptors that the
                                          process has currently opened. */
     struct list pid_to_exit_status;   /* Mappings list from process identification
                                          to the corresponding process' exit
@@ -137,7 +137,6 @@ struct thread
                                          a processes (single-threaded) can be
                                          both child and parent processes. */
     int exit_status;                  /* exit status of thread */
-	  struct list file_list;            /* File list used for file system calls*/
 	  int fd;
     int next_fd;                      /* Next file descriptor to use. */
 #endif
