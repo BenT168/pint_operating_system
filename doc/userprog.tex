@@ -1,29 +1,31 @@
-\documentclass[a4paper,12pt]{article}
-\usepackage [utf8]{inputenc}
-\usepackage{xspace} %better spacing option with :
-\usepackage{amsmath,amsthm,amssymb} %package matematici
-\usepackage{amsfonts} % altri simbolo matematici stronzi
-\usepackage{latexsym} %altri simboli chissa quali
-\usepackage{graphicx}
+\documentclass{article}
+
+\usepackage{fullpage}
 \usepackage{listings}
-\usepackage{fancyhdr}
-\usepackage{multicol}
-\usepackage[pdftex]{color}
-\usepackage{url}
-\usepackage{subfigure}
-\usepackage[final]{pdfpages}
-\newcommand{\fncyblank }{\fancyhf {}}
+\usepackage{color}
 
-\addtolength{\hoffset}{-1,5cm}
-\addtolength{\textwidth}{3cm}
+\setlength{\parskip}{0.5em}
 
-\definecolor{Gray}{cmyk}{0,0,0,0.50}
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
 
-\usepackage{sectsty}
-\sectionfont{\large}
-\subsectionfont{\normalsize}
+\lstset{
+  language=C,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
 
-\title{Pintos Task 1: User Programs Design Document}
+
+\title{Pintos Task 2: User Programs Design Document}
 \author{Group 07: Ben Sheng Tan, Adanna Akwataghibe, Mark Aduol, Alessio Incitti }
 
 \begin{document}
@@ -37,24 +39,7 @@
 
 \textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
 \\ \\
-In thread.h, we added:
-\begin{lstlisting}
-    struct thread
-      {
-        /* TASK 1 : Priority Checking */
-        int base_priority;                /* initial priority of thread */
-        struct list_elem donation_thread; /* thread element that is donated */
-        struct lock* lock_waiting;        /* lock that thread is waiting for */
-        struct list threads_donated;      /* list of threads */
-
-        ...
-      };
-
-\end{lstlisting}
-
-Purpose of each new addition:
-\\ \\
-\texttt{base\_priority}: The base priority of the thread, without taking priority donations into account.
+No additional data structure is added or changed for argument passing.
 
 
 \subsection{ALGORITHMS}
@@ -64,21 +49,36 @@ Purpose of each new addition:
 \textit{Briefly describe how you implemented argument parsing. In particular you
 should mention how you arrange for the elements of argv[] to be in the right
 order and how you avoid overflowing the stack page?}
-
-\\ \\TO WRITE
+\\ \\
+We parse the arguments in \texttt{start\_process}. We create two arrays, \texttt{args} and \texttt{argv} of size \texttt{MAX\_ARGS}. We then call \texttt{parse\_args}, which uses \texttt{strtok\_r} to tokenize the arguments and puts them in \texttt{args}. It first starts by processing the name of the file and the arguments using the \texttt{"strtok\_r"} function. We make space for the argument and check if we have gone over the limit by comparing the space for argument and allocated bytes with the page size. Later on counting the argument before incrementing the token to the next word. The same process is repeated until all the arguments have been parsed. Finally the \texttt{parse\_args} function returns the number of arguments .
+\\ \\
+Then we copy the argument onto the current thread using the "strlcpy"  function and give it as an argument to the load function. If the load function returns successfully we continue pushing the arguments in reverse onto the stack, by looping over \texttt{args}. We  decrement the stack pointer by the length of each argument, and copy the argument into  the stack of the interrupt frame. After finishing the loop, we then round the stack pointer down to a multiple of 4 to make sure to have word-aligned accesses. The NULL sentinel is then pushed by simply decrementing the stack pointer by the size of and int (which is 4 in our case). We then need to push the pointers to the arguments onto the stack. These pointers need to be pushed in reverse order. We therefore use the pointer in which we saved the stack pointer previously. This pointer points to the last argument that was pushed onto the stack. We use this pointer in order to go towards the bottom of the stack. This pointer will then be a pointer to one of the program arguments we pushed on the stack previously. Because we start from the address of the last argument that was pushed and decrement it repeatedly we are ensuring that we are pushing the pointers to those arguments in the reverse order. The loop will stop once the number of pointers on the stack equal to the number of arguments our program has. We then push the pointer back to the first pointer before pushing the number of argument by decrementing the stack pointer with the size of int. We then push a fake return address returning address 0.
+\\ \\
+To do with the elements of argv[], we iterate backwards through the list of pointers with the way we described above. To avoid overflowing the stack page,we check for page overflowing in \texttt{parse\_args}, which checks if the total number of bytes used for the strings will go over \texttt{PGSIZE}, in which case it returns -1.
 
 \subsection{RATIONALE}
 
 \subsubsection*{A3: (5 marks) }
-\textit{Why does Pintos implement \texttt{strtok\_r()} but not strtok()?}
-\\ \\TOWRITE
+\textit{Why does Pintos implement \texttt{strtok\_r()} but not \texttt{strtok()}?}
+\\ \\
+The \texttt{strtok()} function uses a static buffer to keep track of the current position, thus is unsafe in threaded programs such as kernels. If \texttt{strtok()} is called by multiple threads ,  they are interleaved and all might try to write to the global variable at the same time. This would lead to bugs as the value of the global buffer would change whenever \texttt{strtok()} is called.
+\\ \\
+On the contrary, the \texttt{strtok\_r()} function takes in one more argument, called texttt{"char **saveptr"} to save the address of the first byte of the string and keep track of the current position of the string being tokenised between calls. In other words, it maintains the string context and allows successive calls that parse the same string. It also allows different strings to be parsed concurrently, by specifying different SAVEPTR argument.
+\\ \\
+Since Pintos is a multi-thread system, \texttt{strtok\_r()} is more thread-safe.
+
 
 
 \subsubsection*{A4: (5 marks) }
 \textit{In Pintos, the kernel separates commands into a executable name and
 arguments. In Unix-like systems, the shell does this separation. Identify at
 least two advantages of the Unix approach.}
-\\ \\TOWRITE
+\begin{enumerate}
+  \item The shell is able to process aliases for programs, for example, looking up an aliase in the PATH variable. For convenience, the shell can replace that aliase by the real path of the program that the UNIX user wants to execute by expanding the path to the executable before passing it onto the kernel. This saves the user from having to type the full path for a command whenever it is run.
+
+  \item The approach of Unix-like systems is safer since the separation does not take place directly in the kernel. The operations associated with parsing user input will take place in user space. That would make kernel space more secure as well as reduce the  amount of code written in it, thus, reducing complexity and generally making code structure cleaner. Moreover, unsafe commands are identified before arrival to kernel, which in turn simplifies kernel operations.
+\end{enumerate}
+
 
 \section{SYSTEM CALLS}
 
@@ -95,25 +95,68 @@ In thread.h, we added:
     struct thread
       {
         ...
-        /* TASK 1: Advanced scheduling */
-        int cpu_num;
-        int nice;
+        #ifdef USERPROG
+        ....
+
+        /* TASK 2 */
+        pid_t pid;                        /* Unique process identification */
+        struct file *file;                /* Pointer to executable file where
+                                             process run */
+        bool child_load_success;          /* True if the last process executed
+                                             by this thread load successfully */
+        struct semaphore load_sema;       /* Semaphore down when this thread is
+                                             loading. */
+        struct semaphore alive_sema;      /* Semaphore down when this thread is
+                                             alive. */
+        struct thread *parent;            /* Thread of parent process ('null' if no
+                                             parent process exists.) */
+        struct list child_procs;          /* List of threads representing child
+                                             processes that have been spawned by
+                                             this thread's embedding process. */
+        struct list file_list;            /* List of file descriptors that the
+                                             process has currently opened. */
+        struct list pid_to_exit_status;   /* Mappings list from process identification
+                                             to the corresponding process' exit
+                                             status. */
+        struct list_elem child_elem;      /* List element for 'child_procs' list as
+                                             a processes (single-threaded) can be
+                                             both child and parent processes. */
+        int exit_status;                  /* exit status of thread */
+        int fd;                           /* File descriptor of file. *
+        int next_fd;                      /* Next file descriptor to use. */
+        #endif
         ...
         };
-\end{lstlisting}
 
-In 'thread.c', we added:
+        /* TASK 2: Struct for process identification's exit status. */
+        struct pid_exit_status
+          {
+            pid_t pid;                    /* Unique process identification */
+            int exit_status;              /* exit status of thread */
+            struct list_elem elem;        /* Used to put the struct in thread list's
+                                             return status */
+          };
+
+
+        /* TASK 2 : File handler structure to enable storing and searching of files by
+           reference to its file descriptor number */
+        struct file_handle
+          {
+            int fd;                   /* File descriptor of file. */
+            struct file *file;        /* File opened corresponding to this file handler */
+            struct list_elem elem;    /* Element of list of file handler which is held by
+                                         each thread */
+          };
+\end{lstlisting}
+In syscall.c, we added:
 \begin{lstlisting}
-    static int load_avg;
+    /* TASK 2: A \texttt{'syscall\_dispatcher'} type is a generic function pointer. It is
+       used to  call the appropriate system call function. A system call can have a maximum
+       of 3 arguments. */
+    typedef int (*syscall\_dispatcher) (intptr_t, intptr_t, intptr_t);
 \end{lstlisting}
 
-Purpose of each new addition:
 
-\texttt{int cpu\_num}: the recent CPU value of the current thread in fixed point.
-
-\texttt{int nice}: niceness value of the current thread.
-
-\texttt{int load\_avg}: the system's load average value in fixed point.
 
 \subsubsection*{B2: (5 marks) }
 \textit{Describe how you associate file descriptors with open files. Are your
@@ -153,7 +196,7 @@ error-handling? Furthermore, when an error is detected, how do you ensure
 that all temporarily allocated resources (locks, buffers, etc.) are freed?
 In a paragraph, describe the strategy or strategies you adopted for managing
 these issues.}
-\\ \\TOWRITE
+\\ \\ TOWRITE
 
 \subsection{SYNCHRONIZATION}
 
@@ -162,7 +205,7 @@ these issues.}
 cannot return before the new executable has completed loading. How does your
 code ensure this? How is the load success/failure status passed back to the
 thread that calls "exec"?}
-\\ \\TOWRITE
+\\ \\ TOWRITE
 
 \subsubsection*{B8: (5 marks) }
 \textit{Consider parent process P with child process C. How do you ensure proper
