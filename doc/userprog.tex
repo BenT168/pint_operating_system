@@ -39,7 +39,7 @@
 
 \textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
 \\ \\
-No additional data structure is added or changed for argument passing.
+No additional data structures were added or changed for argument passing.
 
 
 \subsection{ALGORITHMS}
@@ -52,7 +52,7 @@ order and how you avoid overflowing the stack page?}
 \\ \\
 We parse the arguments in \texttt{start\_process}. We create two arrays, \texttt{args} and \texttt{argv} of size \texttt{MAX\_ARGS}. We then call \texttt{parse\_args}, which uses \texttt{strtok\_r} to tokenize the arguments and puts them in \texttt{args}. It first starts by processing the name of the file and the arguments using the \texttt{"strtok\_r"} function. We make space for the argument and check if we have gone over the limit by comparing the space for argument and allocated bytes with the page size. Later on counting the argument before incrementing the token to the next word. The same process is repeated until all the arguments have been parsed. Finally the \texttt{parse\_args} function returns the number of arguments .
 \\ \\
-Then we copy the argument onto the current thread using the "strlcpy"  function and give it as an argument to the load function. If the load function returns successfully we continue pushing the arguments in reverse onto the stack, by looping over \texttt{args}. We  decrement the stack pointer by the length of each argument, and copy the argument into  the stack of the interrupt frame. After finishing the loop, we then round the stack pointer down to a multiple of 4 to make sure to have word-aligned accesses. The NULL sentinel is then pushed by simply decrementing the stack pointer by the size of and int (which is 4 in our case). We then need to push the pointers to the arguments onto the stack. These pointers need to be pushed in reverse order. We therefore use the pointer in which we saved the stack pointer previously. This pointer points to the last argument that was pushed onto the stack. We use this pointer in order to go towards the bottom of the stack. This pointer will then be a pointer to one of the program arguments we pushed on the stack previously. Because we start from the address of the last argument that was pushed and decrement it repeatedly we are ensuring that we are pushing the pointers to those arguments in the reverse order. The loop will stop once the number of pointers on the stack equal to the number of arguments our program has. We then push the pointer back to the first pointer before pushing the number of argument by decrementing the stack pointer with the size of int. We then push a fake return address returning address 0.
+Then we copy the argument onto the current thread using the "strlcpy"  function and give it as an argument to the load function. If the load function returns successfully we continue pushing the arguments in reverse order onto the stack, by looping over \texttt{args}. We  decrement the stack pointer by the length of each argument, and copy the argument into  the stack of the interrupt frame. After finishing the loop, we then round the stack pointer down to a multiple of 4 to make sure we have word-aligned accesses. The NULL sentinel is then pushed by simply decrementing the stack pointer by the size of and int (which is 4 in our case). We then need to push the pointers to the arguments onto the stack. These pointers need to be pushed in reverse order. We therefore use the pointer in which we saved the stack pointer previously. This pointer points to the last argument that was pushed onto the stack. We use this pointer in order to go towards the bottom of the stack. This pointer will then be a pointer to one of the program arguments we pushed on the stack previously. Because we start from the address of the last argument that was pushed and decrement it repeatedly we are ensuring that we are pushing the pointers to those arguments in the reverse order. The loop will stop once the number of pointers on the stack equal to the number of arguments our program has. We then push the pointer back to the first pointer before pushing the number of argument by decrementing the stack pointer with the size of int. We then push a fake return address returning address 0.
 \\ \\
 To do with the elements of argv[], we iterate backwards through the list of pointers with the way we described above. To avoid overflowing the stack page,we check for page overflowing in \texttt{parse\_args}, which checks if the total number of bytes used for the strings will go over \texttt{PGSIZE}, in which case it returns -1.
 
@@ -63,7 +63,7 @@ To do with the elements of argv[], we iterate backwards through the list of poin
 \\ \\
 The \texttt{strtok()} function uses a static buffer to keep track of the current position, thus is unsafe in threaded programs such as kernels. If \texttt{strtok()} is called by multiple threads ,  they are interleaved and all might try to write to the global variable at the same time. This would lead to bugs as the value of the global buffer would change whenever \texttt{strtok()} is called.
 \\ \\
-On the contrary, the \texttt{strtok\_r()} function takes in one more argument, called texttt{"char **saveptr"} to save the address of the first byte of the string and keep track of the current position of the string being tokenised between calls. In other words, it maintains the string context and allows successive calls that parse the same string. It also allows different strings to be parsed concurrently, by specifying different SAVEPTR argument.
+On the contrary, the \texttt{strtok\_r()} function takes in one more argument, called \texttt{char **saveptr} to save the address of the first byte of the string and keep track of the current position of the string being tokenised between calls. In other words, it maintains the string context and allows successive calls that parse the same string. It also allows different strings to be parsed concurrently, by specifying different SAVEPTR argument.
 \\ \\
 Since Pintos is a multi-thread system, \texttt{strtok\_r()} is more thread-safe.
 
@@ -74,7 +74,7 @@ Since Pintos is a multi-thread system, \texttt{strtok\_r()} is more thread-safe.
 arguments. In Unix-like systems, the shell does this separation. Identify at
 least two advantages of the Unix approach.}
 \begin{enumerate}
-  \item The shell is able to process aliases for programs, for example, looking up an aliase in the PATH variable. For convenience, the shell can replace that aliase by the real path of the program that the UNIX user wants to execute by expanding the path to the executable before passing it onto the kernel. This saves the user from having to type the full path for a command whenever it is run.
+  \item The shell is able to process aliases for programs, for example, looking up an alias in the PATH variable. For convenience, the shell can replace that alias by the real path of the program that the UNIX user wants to execute by expanding the path to the executable before passing it onto the kernel. This saves the user from having to type the full path for a command whenever it is run.
 
   \item The approach of Unix-like systems is safer since the separation does not take place directly in the kernel. The operations associated with parsing user input will take place in user space. That would make kernel space more secure as well as reduce the  amount of code written in it, thus, reducing complexity and generally making code structure cleaner. Moreover, unsafe commands are identified before arrival to kernel, which in turn simplifies kernel operations.
 \end{enumerate}
@@ -150,10 +150,10 @@ In thread.h, we added:
 \end{lstlisting}
 In syscall.c, we added:
 \begin{lstlisting}
-    /* TASK 2: A \texttt{'syscall\_dispatcher'} type is a generic function pointer. It is
+    /* TASK 2: A 'syscall_dispatcher' type is a generic function pointer. It is
        used to  call the appropriate system call function. A system call can have a maximum
        of 3 arguments. */
-    typedef int (*syscall\_dispatcher) (intptr_t, intptr_t, intptr_t);
+    typedef int (*syscall_dispatcher) (intptr_t, intptr_t, intptr_t);
 \end{lstlisting}
 
 
@@ -161,14 +161,58 @@ In syscall.c, we added:
 \subsubsection*{B2: (5 marks) }
 \textit{Describe how you associate file descriptors with open files. Are your
 file descriptors unique within the entire OS or just within a single process? }
-\\ \\ TOWRITE
+\\ \\
+The important functions here are the \texttt{open} system call and \texttt{thread\_add\_new\_file}. For reference, these functions are given below.
+
+\begin{minipage}{0.5\textwidth}
+\begin{lstlisting}
+int
+open (const char *file)
+{
+  check_memory_access ((void *) file);
+
+  acquire_filelock ();
+  struct file *file_ptr = filesys_open (file);
+  release_filelock ();
+
+  int fd;
+  if (!file_ptr)
+    fd = FILE_OPEN_FAILURE;
+  else
+    fd = thread_add_new_file (file_ptr);
+
+  return fd;
+}
+\end{lstlisting}
+\end{minipage}
+\begin{minipage}{0.5\textwidth}
+\begin{lstlisting}
+int
+thread_add_new_file (struct file *file)
+{
+  struct thread *cur = thread_current ();
+  struct file_handle *handle = malloc (sizeof (struct file_handle));
+
+  handle->file = file;
+  handle->fd = cur->next_fd++;
+
+  list_push_front (&cur->file_list, &handle->elem);
+
+  return handle->fd;
+}
+\end{lstlisting}
+\end{minipage}
+\\ \\
+The above code should be self-explanatory. Each time a file is opened (even the same file opened multiple times), it is allocated a new file descriptor. This is done by incrementing the \texttt{next\_fd} member of the running thread's \texttt{struct}. With this implementation, file descriptors are only unique within the a single process.
 
 \subsection{ALGORITHMS}
 
 \subsubsection*{B3: (5 marks) }
 \textit{Describe how your code ensures safe memory access of user provided data
 from within the kernel. }
-\\ \\TOWRITE
+\\ \\
+The function \texttt{check\_memory\_access(const void *ptr)} is used to ensure safe memory access. First, it ensures that \texttt{ptr} is not null. Secondly, it ensures that \texttt{ptr} is pointing to a valid user memory address, by calling \texttt{is\_user\_vaddr(ptr)}. This function returns true if \texttt{ptr < PHYS\_BASE}, since the virtual memory addresses equal to and above \texttt{PHYS\_BASE} belong to the kernel virtual address space. Thirdly, it ensures that \texttt{ptr} is not pointing to unmapped, virtual memory, by calling \texttt{pagedir\_get\_page(thread\_current()->pagedir, ptr)}. This function call will return null if the virtual address given by \texttt{ptr} is unmapped within the current process' (two-level) page table.
+
 
 \subsubsection*{B4: (5 marks) }
 \textit{Suppose a system call passes the kernel a pointer to a full page (4,096
@@ -177,12 +221,27 @@ greatest possible number of inspections of the page table (e.g. calls to
 \texttt{pagedir\_get\_page())} that might result? What about for a system
  call that passes a pointer to only 2 bytes of data? How might you improve these
 numbers? }
-\\ \\TOWRITE
+\newline
+\newline
+The function \texttt{pagedir\_get\_page(uint32\_t *pd, const void *uaddr)} returns the physical address that corresponds to \texttt{uaddr} in \texttt{pd}. Therefore, if a system call passes the kernel a pointer to a full page that has to be copied, $2^{12} = 4096$ calls of this function are required: one for each virtual address in the page. For 2 bytes of data, 2 calls are required.
+\\ \\
+An obvious optimisation would be to have a single function that does this operation in one go. Such a function however, would need to make 4096 calls to \texttt{pg\_ofs(uaddr)} to obtain the correct offset within the page to which \texttt{uaddr} is mapped. But \texttt{pg\_ofs} is simply a one line function that masks the 12-low order bits of \texttt{uaddr} using the \texttt{\&} operator. As a result, 4096 calls to \texttt{pg\_ofs} are very likely to run more quickly than 4096 calls to \texttt{pagedir\_get\_page()}. Furthermore, we can use the two assembly-based routines provided in the specification, \texttt{get\_user(const unint8\_t *uaddr)} and \texttt{put\_user(uint8\_t *udst, uint8\_t byte)} to read and write bytes from and to specific addresses in physical memory. In this case however, since \texttt{uaddr} and \texttt{udst} are 8 bits in length, we will have to execute these routines for $2^{4}$ consecutive sections of each page frame.
+\\ \\
+This optimisation works equally well for a system call that passes a pointer to only 2 bytes of data that need to be copied. However, if a system call passes a pointer to only 2 bytes of data that need to be copied, it would be much more efficient for the user program to pass these addresses as arguments to the system call. Using the assembly-based routines given above, the kernel could copy the data at these addresses without the need to make another call to \texttt{pagedir\_get\_page}.
 
 \subsubsection*{B5: (8 marks) }
 \textit{Describe your implementation of the "wait" system call and how it interacts
 with process termination for both the parent and child.}
-\\ \\ TOWRITE
+\\ \\
+The \texttt{wait(pid\_t pid)} system call dispatches its work to the function, \texttt{process\_wait(tid\_t tid)}, casting \texttt{pid} to the \texttt{tid\_t} type and returning the return value of \texttt{process\_wait}.
+\\ \\
+In \texttt{process\_wait(tid\_t child\_tid)}, if a thread with the thread id, \texttt{child\_tid} exists, we first check whether it is a child of the running thread. This is done by checking whether \texttt{child\_tid} exists in the running thread's list of child threads, \texttt{child\_procs}. If it is not a child of the running thread, we exit the function immediately, returning -1. Note that since processes are single-threaded in PintOS, it makes no difference to think in terms of process ids or thread ids, so long as we are consistent.
+\\ \\
+Next, by using the function \texttt{get\_tid\_thread(tid\_t tid)}, we obtain a pointer, \texttt{child}, to the child thread of the running thread referenced by \texttt{child\_tid}. If \texttt{child} is not null then we call \texttt{sema\_down(\&child->sema)}. When a thread is alive, the member \texttt{alive\_sema} in \texttt{struct thread} will have the value 0. Therefore, calling \texttt{sema\_down(\&child->alive\_sema)} causes the running thread to block on this child thread if it is still alive. In \texttt{process\_exit}, just before the process is destroyed, we do an "up" on \texttt{alive\_sema}, in order to unblock its parent thread. Blocking the parent thread on a semaphore of the child thread in this manner, also ensures that \texttt{process\_wait} cannot be called multiple times for a single thread id.
+\\ \\
+When a thread exits, either voluntarily or terminated by the kernel, an \texttt{exit} system call is made, passing the exit status of the thread as the sole argument. Before calling \texttt{thread\_exit} (and subsequently \texttt{process\_exit}), we send information about the thread's exit status to it's parent (if one exists). This is done by storing the thread's process id and exit status in a \texttt{struct pid\_exit\_status} (see B1) and inserting this \texttt{struct} into the parent thread's list, \texttt{pid\_to\_exit\_status}.
+\\ \\
+Back in \texttt{process\_wait(tid\_t child\_tid)}, we search the running thread's \texttt{pid\_to\_exit\_status} list for \texttt{(pid\_t) child\_tid}. If a corresponding \texttt{pid\_exit\_status} list entry is found, we return the corresponding exit status. In all other cases we return -1.
 
 \subsubsection*{B6: (5 marks) }
 \textit{Any access to user program memory at a user-specified address can fail due to
@@ -196,7 +255,23 @@ error-handling? Furthermore, when an error is detected, how do you ensure
 that all temporarily allocated resources (locks, buffers, etc.) are freed?
 In a paragraph, describe the strategy or strategies you adopted for managing
 these issues.}
-\\ \\ TOWRITE
+\\ \\
+We have a function \texttt{check\_memory\_access} which we use to check that a pointer is
+legal - so this will exit with -1 if given is a bad pointer value.
+This function is first called in the \texttt{syscall\_handler} to make sure that the
+arguments given to the system calls are in the user address space.
+\\ \\
+In \texttt{write}, \texttt{create}, \texttt{remove} and \texttt{open}, we use \texttt{check\_memory\_access}
+to check that the file given is valid. In read and write, we use the \texttt{check\_memory\_access}
+to check that the buffer is valid in user space as well.
+\\ \\
+We also added some more rigourous checking in exception.c to check more carefully
+for invalid access.
+\\ \\
+We use file locks in critical sections for synchronization - these locks
+are released immediately the critical section is completed. In close, we remove
+the file from the threads list of files and free the  \texttt{struct file\_handle} which stores
+said file (with \texttt{fd} and \texttt{list\_elem} for \texttt{file\_list} ).
 
 \subsection{SYNCHRONIZATION}
 
@@ -205,7 +280,20 @@ these issues.}
 cannot return before the new executable has completed loading. How does your
 code ensure this? How is the load success/failure status passed back to the
 thread that calls "exec"?}
-\\ \\ TOWRITE
+\\ \\
+The first thing we do to ensure synchronization is use a semaphore.
+We have a semaphore for the current process thread \texttt{\&proc\_thread->load\_sema}.
+We \texttt{sema\_up} in \texttt{process\_execute}  before the current thread returns, and we
+\texttt{sema\_down} in \texttt{exec}, after the process has executed. This means that the
+child \texttt{exit\_status} has already been set before the parent has returned.
+We then check if \texttt{process\_execute} returns a \texttt{TID\_ERROR}, if this is the
+case, we return -1.
+We then do some further checking by having a boolean member in the thread \texttt{struct} called
+\texttt{child\_load\_success}, and we check that \texttt{thread\_current()->child\_load\_success}
+returns true, if not we return -1. This variable is set in the function \texttt{load},
+in process.c. It is set to the value of whether the child loaded successfully
+or not.
+
 
 \subsubsection*{B8: (5 marks) }
 \textit{Consider parent process P with child process C. How do you ensure proper
@@ -213,24 +301,58 @@ synchronization and avoid race conditions when P calls wait(C) before or
 after C exits? How do you ensure that all resources are freed in each case?
 How about when P terminates, without waiting, before or after C exits? Your
 answer must cover all four cases mentioned above and address resource freeing.}
-\\ \\TOWRITE
+\\ \\
+When P calls wait(C) before C exits, we put the current thread to be
+blocked by \texttt{sema\_down(\&C->alive\_sema)}. When C exits it will then \texttt{sema\_up}
+and release P.
+\\ \\
+When P calls wait(C) after C exits, in \texttt{process\_exit}, C will remove list of
+child processes of P and \texttt{sema\_up(\&C->alive\_sema)} to unblock P so
+P can now get its \texttt{exit\_status}.
+\\ \\
+All the process' resources are freed in \texttt{process\_exit}, by going through
+the current threads list of child processes and setting the each \texttt{child\_process}
+parent = NULL.
+The file descriptors of the current thread is also freed to prevent a memory leak
+in \texttt{process\_exit}. Furthermore, the list of mapping of pid and \texttt{exit\_status} (\texttt{pid\_to\_exit\_status})
+of the current thread are also freed to prevent a memory leak in \texttt{process\_wait}.
+\\ \\
+When P terminates without waiting before C exits, C will put
+\texttt{sema\_up(\&C->alive\_sema)} and since P has given back the \texttt{alive\_sema},
+C won't be blocked by the semaphore.
+\\ \\
+When P terminates without waiting after C exits, C is blocked by \texttt{alive\_sema}
+until P terminates.
+\\ \\
+The same semaphore used in both \texttt{process\_execute} and \texttt{exec} also avoids any
+potential race conditions between the threads.
 
 \subsection{RATIONALE}
 
 \subsubsection*{B9: (5 marks) }
 \textit{Why did you choose to implement safe access of user memory from the
 kernel in the way that you did?}
-\\ \\ TOWRITE
+\\ \\
+We decided to wrap up all the necessary checks for safe memory access into a single function declared as \texttt{check\_memory\_access(const void *ptr)}. This function is passed a pointer, which is checked against the following critieria: whether it is not a null pointer; whether it is pointing to a user virtual address and not kernel; whether it is not unmapped.
+\\ \\
+If any of these has negative result, it exits with code -1, therefore blocking memory access.
+Otherwise, if all checks are positive the function returns, allowing the caller to proceed.
+This approach is self-contained and encapsulated: since you can perform all checks at once just by calling the function before accessing memory, it aids simplicity, allowing the programmer to forget about how the checks are actually implemented. As a result, this approach avoids duplicated code and repetitions.
 
 \subsubsection*{B10: (5 marks) }
 \textit{What advantages or disadvantages can you see to your design for file
 descriptors?}
-\\ \\ TOWRITE
+\\ \\
+With our design, file descriptors are only unique within a single process. In order to implement file descriptors,  we make use of the two distinct elements: the \texttt{next\_fd} member of the thread \texttt{struct} and a new, three member data structure called a \texttt{file\_handle} (see B1).
+Implementing the file descriptor system this way - rather than using a specific file information as \texttt{fd} number - is simpler and renders the use of file descriptors easier. This also allows to maintain an ordering of files based on ascending \texttt{fd} number.
+\\ \\
+Alternatively, we could have decided to implement file descriptors by hashing the name of the file and maintaing a counter denoting how many times that file has been opened. This way, we would be able to generate unique file descriptors for every file, including the same file opened multiple times. However, such a design is wasteful in terms of space since it requires us to store in memory, a counter for every file opened. Furthermore, it is more complex than our chosen design. An advantage of this scheme however, is that file descriptors also keep track of the number of times each file is opened, which may allow the kernel to cache frequently used files, thereby speeding up performance. Our design however, has no such capability to keep track of the number of times each file is opened and therefore does not allow for such a caching optimisation.
 
 \subsubsection*{B11: (2 marks) }
-\textit{The default \texttt{tid\_t} to \texttt{pid\_t} mapping is the identity mapping. Did you
-change this? Why?}
-\\ \\ TOWRITE
+\textit{The default \texttt{tid\_t} to \texttt{pid\_t} mapping is the identity mapping. Did you change this? Why?}
+\\ \\
+Even though most operating systems do distinguish between \texttt{pid} and \texttt{tid} values and use more complex mappings, we decided to use the default identity mapping between \texttt{tid\_t} and \texttt{pid\_t} primarily because Pintos has single-threaded process only, therefore no user process needs more than one thread to be mapped to. As a result, the mapping is straightforward and is easier to deal with.
+
 
 
 
