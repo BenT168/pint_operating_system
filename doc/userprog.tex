@@ -31,7 +31,7 @@
 \begin{document}
 \maketitle
 
-\section{ARGUMENT PASSING}
+\section{ARGUMENT PARSING}
 
 \subsection{ DATA STRUCTURES}
 
@@ -39,8 +39,11 @@
 
 \textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
 \\ \\
-No additional data structures were added or changed for argument passing.
-
+In process.c, we added:
+\begin{lstlisting}
+	#define MAX_ARGS 50		   /* Maximum number of arguments for argument parsing */
+\end{lstlisting}
+No additional structs were added or changed for argument parsing.
 
 \subsection{ALGORITHMS}
 
@@ -343,10 +346,10 @@ This approach is self-contained and encapsulated: since you can perform all chec
 \textit{What advantages or disadvantages can you see to your design for file
 descriptors?}
 \\ \\
-With our design, file descriptors are only unique within a single process. In order to implement file descriptors,  we make use of the two distinct elements: the \texttt{next\_fd} member of the thread \texttt{struct} and a new, three member data structure called a \texttt{file\_handle} (see B1).
+With our design, file descriptors are only unique within a single process. In order to implement file descriptors, we make use of the two distinct elements: the \texttt{next\_fd} member of the thread \texttt{struct} and a new, three member data structure called a \texttt{file\_handle} (see B1).
 Implementing the file descriptor system this way - rather than using a specific file information as \texttt{fd} number - is simpler and renders the use of file descriptors easier. This also allows to maintain an ordering of files based on ascending \texttt{fd} number.
 \\ \\
-Alternatively, we could have decided to implement file descriptors by hashing the name of the file and maintaing a counter denoting how many times that file has been opened. This way, we would be able to generate unique file descriptors for every file, including the same file opened multiple times. However, such a design is wasteful in terms of space since it requires us to store in memory, a counter for every file opened. Furthermore, it is more complex than our chosen design. An advantage of this scheme however, is that file descriptors also keep track of the number of times each file is opened, which may allow the kernel to cache frequently used files, thereby speeding up performance. Our design however, has no such capability to keep track of the number of times each file is opened and therefore does not allow for such a caching optimisation.
+Alternatively, we could have decided to implement file descriptors by hashing the name of the file and maintain a counter denoting how many times that file has been opened. This way, we would be able to generate unique file descriptors for every file, including the same file opened multiple times. However, such a design is wasteful in terms of space since it requires us to store in memory, a counter for every file opened. Furthermore, it is more complex than our chosen design. An advantage of this scheme however, is that file descriptors also keep track of the number of times each file is opened, which may allow the kernel to cache frequently used files, thereby speeding up performance. Our design however, has no such capability to keep track of the number of times each file is opened and therefore does not allow for such a caching optimisation.
 
 \subsubsection*{B11: (2 marks) }
 \textit{The default \texttt{tid\_t} to \texttt{pid\_t} mapping is the identity mapping. Did you change this? Why?}

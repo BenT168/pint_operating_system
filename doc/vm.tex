@@ -1,0 +1,210 @@
+\documentclass{article}
+
+\usepackage{fullpage}
+\usepackage{listings}
+\usepackage{color}
+
+\setlength{\parskip}{0.5em}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{
+  language=C,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+
+\title{Pintos Task 3: Virtual Memory Design Document}
+\author{Group 07: Ben Sheng Tan, Adanna Akwataghibe, Mark Aduol, Alessio Incitti }
+
+\begin{document}
+\maketitle
+
+\section{PAGE TABLE MANAGEMENT}
+
+\subsection{ DATA STRUCTURES}
+
+\subsection*{A1: (5 marks) }
+
+\textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’ member, global or static variable, ‘typedef’, or enumeration. Identify the purpose of each in 25 words or less.}
+\\ \\
+In process.c, we added:
+\begin{lstlisting}
+	#define MAX_ARGS 50		   /* Maximum number of arguments for argument parsing */
+\end{lstlisting}
+No additional structs were added or changed for argument parsing.
+
+\subsection{ALGORITHMS}
+
+\subsection*{A2: (5 marks) }
+
+\textit{Describe your code for locating the frame, if any, that contains the data of a given page.}
+\\ \\
+TOWRITE
+
+
+\subsubsection*{A3: (5 marks) }
+\textit{How does your code coordinate accessed and dirty bits between
+ kernel and user virtual addresses that alias a single frame?
+ Your answer should include a discussion of how you have implemented
+ sharing of read only pages.}
+\\ \\
+TOWRITE
+
+\subsection{SYNCHRONIZATION}
+
+\subsubsection*{A4: (5 marks) }
+\textit{When two user processes both need a new frame at the same time,
+how are races avoided? You should consider both when there are
+and are not free frames available in memory.}
+\\ \\
+TOWRITE
+
+\subsection{RATIONALE}
+
+\subsubsection*{A5: (5 marks) }
+\textit{Why did you choose the data structure(s) that you did for representing virtual-to-physical mappings?.}
+\\ \\
+TOWRITE
+
+
+\section{PAGING TO AND FROM DISK}
+
+\subsection{DATA STRUCTURES}
+
+\subsection*{B1: (5 marks) }
+
+\textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’
+member, global or static variable, ‘typedef’, or enumeration. Identify the
+purpose of each in 25 words or less.}
+\\\\
+In thread.h, we added:
+\begin{lstlisting}
+    struct thread
+                                 each thread */
+          };
+\end{lstlisting}
+
+\subsection{ALGORITHMS}
+
+\subsubsection*{B2: (5 marks) }
+\textit{When a frame is required but none is free, some frame must be evicted.  Describe your code for choosing a frame to evict.}
+\\ \\
+TOWRITE
+
+
+\subsubsection*{B3: (5 marks) }
+\textit{When a process P obtains a frame that was previously used by a
+process Q, how do you adjust the page table (and any other data
+structures) to reflect the frame Q no longer has? }
+\\ \\
+TOWRITE
+
+
+\subsubsection*{B4: (5 marks) }
+\textit{Explain your heuristic for deciding whether a page fault for an
+invalid virtual address should cause the stack to be extended into
+the page that faulted. }
+\\\ \\
+TOWRITE
+
+
+
+\subsection{SYNCHRONIZATION}
+
+\subsubsection*{B5: (8 marks) }
+\textit{Explain the basics of your VM synchronization design.  In particular, explain how it prevents deadlock.  (Refer to a
+ textbook for an explanation of the necessary conditions for deadlock.)}
+\\ \\
+TO WRITE
+
+
+\subsubsection*{B6: (5 marks) }
+\textit{A page fault in process P can cause another process Q's frame
+to be evicted.  How do you ensure that Q cannot access or modify
+the page during the eviction process?  How do you avoid a race
+between P evicting Q's frame and Q faulting the page back in?
+}
+\\ \\
+TOWRITE
+
+
+\subsubsection*{B7: (5 marks) }
+\textit{Explain how you handle access to paged-out pages that occur
+during system calls. How do you gracefully handle attempted
+accesses to invalid virtual addresses?}
+\\ \\
+TOWRITE
+
+\subsection{RATIONALE}
+
+\subsubsection*{B8: (5 marks) }
+\textit{A single lock for the whole VM system would make
+synchronization easy, but limit parallelism.  On the other hand,
+using many locks complicates synchronization and raises the
+possibility for deadlock but allows for high parallelism.  Explain
+where your design falls along this continuum and why you chose to
+design it this way.}
+\\ \\
+TOWRITE
+
+
+\section{MEMORY MAPPED FILES}
+
+\subsection{DATA STRUCTURES}
+
+\subsection*{C1: (5 marks) }
+
+\textit{Copy here the declaration of each new or changed ‘struct’ or ‘struct’
+member, global or static variable, ‘typedef’, or enumeration. Identify the
+purpose of each in 25 words or less.}
+\\\\
+In thread.h, we added:
+\begin{lstlisting}
+    struct thread
+                                 each thread */
+          };
+\end{lstlisting}
+
+\subsection{ALGORITHMS}
+
+\subsubsection*{C2: (5 marks) }
+\textit{Describe how memory mapped files integrate into your virtual
+ memory subsystem.  Explain how the page fault and eviction
+ processes differ between swap pages and other pages.}
+\\ \\
+TOWRITE
+
+
+\subsubsection*{C3: (5 marks) }
+\textit{Explain how you determine whether a new file mapping overlaps any existing segment. }
+\\ \\
+TOWRITE
+
+
+\subsection{RATIONALE}
+
+\subsubsection*{C4: (5 marks) }
+\textit{Mappings created with "mmap" have similar semantics to those of
+data demand-paged from executables, except that "mmap" mappings are
+written back to their original files, not to swap.  This implies
+that much of their implementation can be shared.  Explain why your
+implementation either does or does not share much of the code for
+the two situations.}
+\\\ \\
+TOWRITE
+
+
+
+\end{document}
