@@ -3,15 +3,35 @@
 #include <stdio.h>
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
+#include "userprog/process.h"
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
+#include "threads/pte.h"
+#include "vm/frame.h"
+
+// Size of an instruction
+#define INSTR_SIZE 32
+
+// Set max stack size to 8MB
+#define MAX_STACK_SIZE 8388608
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
+static bool is_stack_access (void *, void *);
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+
+/* TASK 3 : True if addr appears to be a stack access, false otherwise.
+ * Check that address is above esp minus a pointer size (in user space)
+ * and that the push won't go over the max stack size */
+static bool
+is_stack_access (void *addr, void *esp)
+{
+  return (addr >= esp - INSTR_SIZE) && (PHYS_BASE - pg_round_down (addr) <= MAX_STACK_SIZE);
+}
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -154,19 +174,38 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   /* TASK 2 : Try to access a kernel address in user mode. */
-	if (user && (!is_user_vaddr(fault_addr) || fault_addr <= 0x08048000)) {
+	if (user && (!is_user_vaddr(fault_addr) || !fault_addr)) {
 		exit(-1);
 	} else if (!user && is_user_vaddr(fault_addr)) {
 		exit(-1);
 	}
 
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+  /* TASK 3 : TO COMMENT */
+  void *upage = pg_round_down (fault_addr);
+  struct frame frame;
+  frame.upage = upage;
+
+  void * fault_page = (void *) (PTE_ADDR & (uint32_t) fault_addr);
+  struct thread *cur = thread_current ();
+  lock_acquire(&cur->sup_page_table_lock);
+  struct hash_elem *e = hash_find(&cur->sup_page_table, &frame.frame_elem);
+  if (!e) {
+    if (is_stack_access (fault_addr, f->esp))
+    {
+      lock_release(&cur->sup_page_table_lock);
+      //TODO : create stack page
+      return;
+    }
+
+    exit(-1);
+  }
+  struct frame *pt_frame = hash_entry(e, struct frame, frame_elem);
+
+  if (write && !pt_frame->writable) {
+    exit(-1);
+  }
+
+
+  kill (f); // TODO : kill if page is not loading
+  lock_release(&cur->sup_page_table_lock);
 }

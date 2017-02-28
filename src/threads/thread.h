@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 #include "threads/synch.h"
 
@@ -153,6 +154,12 @@ struct thread
     /* TASK 1: Advanced scheduling */
     int cpu_num;                        /* Time spent in the CPU recently */
     int nice;                           /* Index of greediness for CPU */
+
+
+    /* TASK 3: VM */
+    struct lock sup_page_table_lock;
+    struct hash sup_page_table;
+    struct list mmapped_files;
 
 	/* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
