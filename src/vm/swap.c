@@ -1,0 +1,106 @@
+#include "vm/swap.h"
+#include "vm/page.h"
+#include "threads/malloc.h"
+#include "threads/synch.h"
+#include "userprog/syscall.h"
+#include <bitmap.h>
+#include <hash.h>
+#include <debug.h>
+#include <stdio.h>
+
+static struct block *swap_space;
+static struct lock swap_lock;
+static struct bitmap * swap_bitmap;
+unsigned swap_size;
+
+static void acquire_framelock (void);
+static void release_framelock (void);
+
+block_sector_t swap_get_free(void);
+
+/* TASK 3 : Acquires lock over swap table */
+static void
+acquire_swaplock (void)
+{
+  lock_acquire (&swap_lock);
+}
+
+/* TASK 3 : Releases lock from swap table */
+static void
+release_swaplock (void)
+{
+  lock_release (&swap_lock);
+}
+
+
+void
+swap_init ()
+{
+  /* block device used for swapping */
+  swap_space = block_get_role (BLOCK_SWAP);
+
+  /* get the size of the block */
+  swap_size = block_size (swap_space);
+
+  /* initializes the swap lock */
+  lock_inits(&swap_lock);
+
+  swap_bitmap = bitmap_create (swap_size);
+}
+
+/* TASK 3: Construct the swap slot and dereference to frame */
+struct
+swap_slot * swap_slot_construct (struct frame * frame)
+{
+  struct swap_slot * swap_slot = malloc (sizeof (struct swap_slot));
+  swap_slot->swap_frame = frame;
+  return swap_slot;
+}
+
+/* TASK 3: Checking as if the swap table is full or else flips them all and
+   returns the index of the first bit in the group. */
+block_sector_t swap_get_free ()
+{
+  bool isFull = bitmap_all (swap_bitmap, 0 , swap_size);
+  if (isFull)
+  {
+    PANIC("SWAP id full! Memory exhausted!")
+    return null;
+  }
+  return bitmap_scan_and_flip (swap_bitmap, 0, PGSIZE / BLOCK_SECTOR_SIZE, NULL);
+}
+
+/* TASK 3 : Load the swapping address by reading the block device */
+void
+swap_load (void *upageaddr, struct swap_slot* ss)
+{
+  acquire_swaplock();
+  for (int i; i < PGSIZE / BLOCK_SECTOR_SIZE; i++) {
+    block_read (swap_space, ss->swap_addr + i, upageaddr + i * BLOCK_SECTOR_SIZE);
+  }
+  bitmap_set_multiple (swap_bitmap, ss->swap_addr, PGSIZE / BLOCK_SECTOR_SIZE);
+  release_swaplock();
+};
+
+
+/* TASK 3 : Store the swapping address by writing into the block device */
+void
+swap_store (struct swap_slot * ss)
+{
+  acquire_swaplock();
+  block_sector_t swap_addr = swap_get_free();
+  for (int i; i < PGSIZE / BLOCK_SECTOR_SIZE; i++)
+  {
+    block_write (swap_space, swap_addr + i, ss->swap_frame->upage + i *BLOCK_SECTOR_SIZE);
+  }
+  release_swaplock();
+}
+
+/* TASK 3: free swap slots */
+void
+swap_free (struct swap_slot * ss)
+{
+  acquire_swaplock();
+	bitmap_set_multiple (swap_bitmap, ss->swap_addr, PGSIZE / BLOCK_SECTOR_SIZE, false);
+	release_swaplock();
+}
