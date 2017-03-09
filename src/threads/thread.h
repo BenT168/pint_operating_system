@@ -163,7 +163,7 @@ struct thread
     /* TASK 3: VM */
     mapid_t mapid;
     struct lock sup_page_table_lock;
-    struct hash sup_page_table_entry;
+    struct hash sup_page_table;
     struct list mmapped_files;
 
 	/* Owned by thread.c. */

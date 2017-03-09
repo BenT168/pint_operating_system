@@ -2,6 +2,10 @@
 #define VM_PAGE_H
 
 #include <debug.h>
+#include <stdint.h>
+#include <hash.h>
+#include <stdbool.h>
+#include "filesys/file.h"
 #include "filesys/off_t.h"
 #include "threads/palloc.h"
 
@@ -20,7 +24,7 @@ struct page_table_entry {
 
   bool loaded;
   bool alive;
-  bool writable; 
+  bool writable;
 
   struct hash_elem elem;
 
@@ -38,12 +42,10 @@ void insert_page_table_entry(struct hash* hash_table, struct page_table_entry* p
 bool load_file(struct page_table_entry* pte);
 bool load_swap(struct page_table_entry* pte);
 bool load_mem_map_file(struct page_table_entry* pte);
-bool insert_file(struct file* file, off_t offset, uint8_t *upage,
-                             uint32_t read_bytes, uint32_t zero_bytes,
-                             bool writable);
-bool insert_mem_map_file(struct file* file, off_t offset, uint8_t *upage,
-                             uint32_t read_bytes, uint32_t zero_bytes,
-                             bool writable);
+bool insert_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
+bool insert_mem_map_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 bool grow_stack(void* vaddr);
+void free_pte(struct page_table_entry* pte);
+
 
 #endif

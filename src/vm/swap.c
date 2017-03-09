@@ -15,9 +15,6 @@ static struct lock swap_lock;
 static struct bitmap * swap_bitmap;
 unsigned swap_size;
 
-static void acquire_framelock (void);
-static void release_framelock (void);
-
 block_sector_t swap_get_free(void);
 
 /* TASK 3 : Acquires lock over swap table */
@@ -77,7 +74,7 @@ void
 swap_load (void *upageaddr, struct swap_slot* ss)
 {
   acquire_swaplock();
-  for (int i; i < PGSIZE / BLOCK_SECTOR_SIZE; i++) {
+  for (int i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++) {
     block_read (swap_space, ss->swap_addr + i, upageaddr + i * BLOCK_SECTOR_SIZE);
   }
   bitmap_set_multiple (swap_bitmap, ss->swap_addr, PGSIZE / BLOCK_SECTOR_SIZE, NULL);
@@ -91,7 +88,7 @@ swap_store (struct swap_slot * ss)
 {
   acquire_swaplock();
   block_sector_t swap_addr = swap_get_free();
-  for (int i; i < PGSIZE / BLOCK_SECTOR_SIZE; i++)
+  for (int i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++)
   {
     block_write (swap_space, swap_addr + i, ss->swap_frame->upage + i *BLOCK_SECTOR_SIZE);
   }

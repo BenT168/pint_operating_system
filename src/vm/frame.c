@@ -48,7 +48,7 @@ frame_evict (void)
 {
   acquire_framelock();
   if (list_empty (&eviction_list)) {
-    return NULL;
+    return;
   }
   struct list_elem *e = list_begin (&eviction_list);
   struct frame *victim = list_entry (e, struct frame, list_elem);
@@ -61,7 +61,7 @@ frame_evict (void)
     victim = list_entry (e, struct frame, list_elem);
   }
 
-  
+
   lock_release (&frame_lock);
 
   if (!victim) {
@@ -69,7 +69,7 @@ frame_evict (void)
   }
 
   // TODO:  Accessed and Dirty Bit
-  
+
 }
 
 /* TASK 3 : Allocates a new page, and adds it to the frame table */
@@ -108,7 +108,7 @@ frame_get (void * upage, bool zero, bool writable)
 void
 frame_free (void * addr)
 {
-  struct frame frame_elem; 
+  struct frame frame_elem;
   struct hash_elem * found_frame = hash_find(&frames, &frame_elem.hash_elem);
   frame_elem.addr = addr;
 
@@ -144,18 +144,3 @@ frame_hash(const struct hash_elem *fe, void *aux UNUSED)
 	const struct frame * frame = hash_entry(fe, struct frame, hash_elem);
 	return hash_int((unsigned) frame->upage);
 }
-
-/* Task 3: Allocate frame in frame table */
-void* frame_allocate(struct page_table_entry*  pte, enum palloc_flags flags) {
-  assert((PAL_USER & flags) != 0);
-
-  void* frame = palloc_get_page(flags); 
-  
-  if(frame != NULL) {
-    return NULL; 
-  }
-  frame_add_to_table(frame, pte); 
- 
-  return frame; 
-}
-

@@ -87,6 +87,9 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  /* TASK 3 : Initialise supplementary page table */
+  page_table_init(&thread_current()->sup_page_table);
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -576,13 +579,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 static bool
 load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
-		     uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
+		     uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  while (read_bytes > 0 || zero_bytes > 0) 
+  while (read_bytes > 0 || zero_bytes > 0)
     {
       /* Calculate how to fill this page.
          We will read PAGE_READ_BYTES bytes from FILE
@@ -590,9 +593,9 @@ load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Insert file in page table */ 
+      /* Insert file in page table */
       bool file_inserted = insert_file (file, ofs, upage, page_read_bytes,
-                                 page_zero_bytes, writable); 
+                                 page_zero_bytes, writable);
 
       if (!file_inserted) {
         return false;
@@ -604,9 +607,9 @@ load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
       ofs += page_read_bytes;
       upage += PGSIZE;
   }
-  
+
   return true;
-  
+
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of

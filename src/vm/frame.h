@@ -25,15 +25,13 @@ struct file_d
   struct file *filename;
   int file_offset;
   int content_len;
-  size_t read_bytes; 
+  size_t read_bytes;
   size_t zero_bytes;
 };
 
 void frame_init (void);
 void frame_evict (void);
-void* frame_allocate(struct page_table_entry*  pte, enum palloc_flags flags);
 void* frame_get(void * upage, bool zero, bool writable);
-void frame_free (void * addr); 
-
+void frame_free (void * addr);
 
 #endif /* vm/frame.h */
