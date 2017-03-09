@@ -23,6 +23,10 @@ typedef int tid_t;
 /* TASK 2: Process identifier type. */
 typedef int pid_t;
 
+/* TASK 3: Map id */
+typedef int mapid_t;
+
+
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -157,8 +161,9 @@ struct thread
 
 
     /* TASK 3: VM */
+    mapid_t mapid;
     struct lock sup_page_table_lock;
-    struct hash sup_page_table;
+    struct hash sup_page_table_entry;
     struct list mmapped_files;
 
 	/* Owned by thread.c. */

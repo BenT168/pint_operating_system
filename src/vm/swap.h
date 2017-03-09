@@ -8,7 +8,6 @@ struct swap_slot {
 	struct frame *swap_frame;
 	block_sector_t swap_addr;	 /* Address of the first segment where the page is
 	                              stored */
-	struct hash_elem hash_elem;
 };
 
 void swap_init (void);

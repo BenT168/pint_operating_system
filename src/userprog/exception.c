@@ -10,6 +10,7 @@
 #include "threads/synch.h"
 #include "threads/pte.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 
 // Size of an instruction
 #define INSTR_SIZE 32
@@ -181,7 +182,8 @@ page_fault (struct intr_frame *f)
 	}
 
   /* TASK 3 : TO COMMENT */
-  void *upage = pg_round_down (fault_addr);
+
+  /*void *upage = pg_round_down (fault_addr);
   struct frame frame;
   frame.upage = upage;
 
@@ -200,12 +202,32 @@ page_fault (struct intr_frame *f)
     exit(-1);
   }
   struct frame *pt_frame = hash_entry(e, struct frame, frame_elem);
+ */
+  struct thread* curr = thread_current(); 
+  lock_acquire(&curr->sup_page_table_lock);
+ 
+  void* vaddr = pg_round_down(fault_addr); 
 
+  struct page_table_entry* pte = get_page_table_entry(&curr->sup_page_table_entry,vaddr);
+  bool load = false;   
+  if(pte != NULL && !pte->loaded) {
+    switch (pte->bit_set) {
+      case FILE_BIT: load = load_file(pte); break; 
+      case SWAP_BIT: load = load_swap(pte); break; 
+      case MMAP_BIT: load =  load_mem_map_file(pte); break; 
+    } 
+  } else if(pte == NULL && is_stack_access(fault_addr, f->esp)) {
+      load = grow_stack(fault_addr);
+  }
+
+  /*
   if (write && !pt_frame->writable) {
     exit(-1);
   }
+  */
 
-
-  kill (f); // TODO : kill if page is not loading
-  lock_release(&cur->sup_page_table_lock);
+  if (!load) {
+    kill (f); // kill if page is not loading
+  }
+  lock_release(&curr->sup_page_table_lock);
 }

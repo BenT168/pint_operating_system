@@ -387,3 +387,39 @@ close (int fd)
   free(handle);               /* frees memory calloced for struct sys_file */
   release_filelock ();
 }
+
+/* TASK 3 : Mapping */
+mapid_t
+mmap(int fd, void* addr) {
+// TODO
+  struct thread *cur = thread_current ();
+  struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
+  //struct file_d* file_d = get_mapped_files (&cur->mmapped_files, addr);
+
+  struct file* file;
+  if(handle != NULL) {
+    file = handle->file;
+  }
+
+  /*struct file_d file_d;
+  file_d->file = file;
+  file_d->file_offset = 0;*/
+  return 0; 
+}
+
+/*
+struct file_d*
+get_mapped_files (struct list *mapped_file, void *addr)
+{
+  struct list_elem *e = list_begin (mapped_file);
+
+  for (; e != list_end (mapped_file); e = list_next (e))
+  {
+    struct file_d *file_d  = list_entry (e, struct file_d, elem);
+
+    if (file_d->filename == addr)
+      return file_d;
+  }
+  return NULL;
+}
+*/

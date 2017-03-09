@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "userprog/process.h"
 #include "lib/user/syscall.h"
+#include "vm/frame.h"
 
 /* Tasks 2 and later. */
 void syscall_init (void);
@@ -22,6 +23,11 @@ int write (int fd, const void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
+
+/* TASK 3 */
+mapid_t mmap(int fd, void* addr);
+void munmap(mapid_t mapping);
+struct file_d* get_mapped_files (struct list *mapped_file, void *addr);
 
 
 #endif /* userprog/syscall.h */

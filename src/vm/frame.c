@@ -1,11 +1,13 @@
-#include "frame.h"
+#include "vm/frame.h"
 #include <hash.h>
 #include <list.h>
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
+#include "vm/page.h"
 
 static struct hash frames;
 static struct lock frame_lock;
@@ -58,17 +60,20 @@ frame_evict (void)
     }
     victim = list_entry (e, struct frame, list_elem);
   }
+
+  
   lock_release (&frame_lock);
 
   if (!victim) {
     PANIC("Could not allocate a frame, but no frames are allocated");
   }
 
-  //TODO : Accessed and Dirty Bit
+  // TODO:  Accessed and Dirty Bit
+  
 }
 
 /* TASK 3 : Allocates a new page, and adds it to the frame table */
-void
+void*
 frame_get (void * upage, bool zero, bool writable)
 {
   void *kpage = palloc_get_page (PAL_USER | zero ? PAL_ZERO : 0 );
@@ -103,17 +108,17 @@ frame_get (void * upage, bool zero, bool writable)
 void
 frame_free (void * addr)
 {
+  struct frame frame_elem; 
   struct hash_elem * found_frame = hash_find(&frames, &frame_elem.hash_elem);
-  struct frame frame_elem;
   frame_elem.addr = addr;
 
-	if (found_frame) {
-      lock_acquire(&lock_frame);
+  if (found_frame) {
+      lock_acquire(&frame_lock);
       struct frame *frame = hash_entry(found_frame, struct frame, hash_elem);
       list_remove (&frame->list_elem);
       palloc_free_page(frame->addr);
       hash_delete(&frames, &frame->hash_elem);
-      lock_release(&lock_frame);
+      lock_release(&frame_lock);
 		  if (frame->frame_sourcefile) {
 			     free(frame->frame_sourcefile);
 		  }
@@ -139,3 +144,18 @@ frame_hash(const struct hash_elem *fe, void *aux UNUSED)
 	const struct frame * frame = hash_entry(fe, struct frame, hash_elem);
 	return hash_int((unsigned) frame->upage);
 }
+
+/* Task 3: Allocate frame in frame table */
+void* frame_allocate(struct page_table_entry*  pte, enum palloc_flags flags) {
+  assert((PAL_USER & flags) != 0);
+
+  void* frame = palloc_get_page(flags); 
+  
+  if(frame != NULL) {
+    return NULL; 
+  }
+  frame_add_to_table(frame, pte); 
+ 
+  return frame; 
+}
+
