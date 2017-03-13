@@ -31,7 +31,7 @@ struct file_d
 
 void frame_init (void);
 void frame_evict (void);
-void* frame_get(void * upage, bool zero, bool writable);
+void* frame_get(void * upage, enum palloc_flags flags);
 void frame_free (void * addr);
 
 #endif /* vm/frame.h */

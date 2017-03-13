@@ -183,33 +183,15 @@ page_fault (struct intr_frame *f)
 
   /* TASK 3 : TO COMMENT */
 
-  /*void *upage = pg_round_down (fault_addr);
-  struct frame frame;
-  frame.upage = upage;
-
-  void * fault_page = (void *) (PTE_ADDR & (uint32_t) fault_addr);
-  struct thread *cur = thread_current ();
-  lock_acquire(&cur->sup_page_table_lock);
-  struct hash_elem *e = hash_find(&cur->sup_page_table, &frame.frame_elem);
-  if (!e) {
-    if (is_stack_access (fault_addr, f->esp))
-    {
-      lock_release(&cur->sup_page_table_lock);
-      //TODO : create stack page
-      return;
-    }
-
-    exit(-1);
-  }
-  struct frame *pt_frame = hash_entry(e, struct frame, frame_elem);
- */
   struct thread* curr = thread_current();
   lock_acquire(&curr->sup_page_table_lock);
 
   void* vaddr = pg_round_down(fault_addr);
 
   struct page_table_entry* pte = get_page_table_entry(&curr->sup_page_table,vaddr);
+
   bool load = false;
+
   if(pte != NULL && !pte->loaded) {
     switch (pte->bit_set) {
       case FILE_BIT: load = load_file(pte); break;
@@ -220,11 +202,6 @@ page_fault (struct intr_frame *f)
       load = grow_stack(fault_addr);
   }
 
-  /*
-  if (write && !pt_frame->writable) {
-    exit(-1);
-  }
-  */
 
   if (!load) {
     kill (f); // kill if page is not loading

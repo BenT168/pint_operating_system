@@ -391,35 +391,102 @@ close (int fd)
 /* TASK 3 : Mapping */
 mapid_t
 mmap(int fd, void* addr) {
-// TODO
-  struct thread *cur = thread_current ();
-  struct file_handle *handle = thread_get_file_handle (&cur->file_list, fd);
-  //struct file_d* file_d = get_mapped_files (&cur->mmapped_files, addr);
 
-  struct file* file;
-  if(handle != NULL) {
-    file = handle->file;
+
+  struct thread *curr = thread_current ();
+  struct file_handle *handle = thread_get_file_handle (&curr->file_list, fd);
+
+  // fails if fd file has zero bytes
+  int file_len = file_length (handle->file);
+  if(file_len) {
+    return -1;
   }
 
-  /*struct file_d file_d;
-  file_d->file = file;
-  file_d->file_offset = 0;*/
-  return 0; 
-}
-
-/*
-struct file_d*
-get_mapped_files (struct list *mapped_file, void *addr)
-{
-  struct list_elem *e = list_begin (mapped_file);
-
-  for (; e != list_end (mapped_file); e = list_next (e))
-  {
-    struct file_d *file_d  = list_entry (e, struct file_d, elem);
-
-    if (file_d->filename == addr)
-      return file_d;
+  //if address is not page aligned
+  if(pg_ofs(addr) != 0) {
+    return -1;
   }
-  return NULL;
+
+  // fail if addr = 0
+  if(addr == 0x0) {
+    return -1;
+  }
+
+  // fail if fd =0 or 1
+  if(fd == 0 || fd == 1) {
+    return -1;
+  }
+
+  // fail f the range of pages mapped overlaps any existing set of mapped pages
+  if(!check_consec_addr(addr, file_len)) {
+    return -1;
+  }
+
+  // Now we map the file
+  struct mmap_file* mmap_file = (struct mmap_file*)malloc(sizeof(struct mmap_file));
+  mmap_file->file = handle->file;
+  mmap_file->mapid = curr->mapid++;
+  mmap_file->addr = addr;
+
+  int off = 0;
+  while(file_len > 0) {
+    size_t read_bytes;
+    if(file_len >= PGSIZE) {
+      read_bytes = PGSIZE;
+    } else {
+      read_bytes = file_len;
+    }
+
+    // try inserting file into page table entry
+    bool inserted = insert_mem_map_file(handle->file, off, addr, read_bytes, 0, false);
+
+    if(!inserted) {
+      return -1;
+    }
+    file_len -= PGSIZE;
+    off +=PGSIZE;
+    addr += PGSIZE;
+
+    // Insert mmap file mapped file list
+    list_push_back (&curr->mmapped_files, &mmap_file->elem);
+  }
+
+  return mmap_file->mapid;
 }
-*/
+
+// check conscutive pages not mapped
+bool
+check_consec_addr(void* addr, int file_length) {
+
+  struct thread* curr = thread_current ();
+  int off = 0;
+
+  while(off < file_length) {
+    void* curr_addr = addr + off;
+    struct page_table_entry* pte = get_page_table_entry(&curr->sup_page_table,
+    curr_addr);
+    void* frame = pagedir_get_page(curr->pagedir, curr_addr);
+    // Check physical and virtual memory not used
+    if(pte != NULL || frame != NULL) {
+      return false;
+    }
+    off += PGSIZE;
+  }
+  return true;
+}
+
+
+void
+munmap (mapid_t mapping) {
+
+  struct thread* curr = thread_current ();
+  struct list* list = &curr->mmapped_files;
+  struct list_elem *e = list_begin (list);
+
+  for(; e != list_end (list) ; e = list_next(e)) {
+    struct mmap_file *mmap_file = list_entry (e, struct mmap_file, elem);
+    if(mmap_file->mapid == mapping) {
+      list_remove (e);
+    }
+  }
+}

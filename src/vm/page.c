@@ -16,7 +16,7 @@
 // Function needed for hash table
 unsigned
 page_hash_table(const struct hash_elem *h_elem, void *aux UNUSED) {
-  struct page_table_entry* pte;
+  struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
   pte = hash_entry(h_elem, struct page_table_entry, elem);
 
@@ -41,8 +41,8 @@ is_lower_hash_elem(const struct hash_elem* a, const struct hash_elem* b, void *a
 
 // Initialise page table
 void
-page_table_init(struct hash* page_table_hash) {
-  hash_init(page_table_hash, page_hash_table, is_lower_hash_elem, NULL);
+page_table_init(struct hash* hash) {
+  hash_init(hash, page_hash_table, is_lower_hash_elem, NULL);
 }
 
 

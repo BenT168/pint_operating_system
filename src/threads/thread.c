@@ -243,6 +243,10 @@ thread_create (const char *name, int priority,
   list_push_back (&thread_current()->child_procs, &child->child_elem);
   #endif
 
+  /* TASK 3 */
+  // initialise threead mapid for memory mapped files 
+  t->mapid = 0;
+
   return tid;
 }
 

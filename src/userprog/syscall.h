@@ -28,6 +28,6 @@ void close (int fd);
 mapid_t mmap(int fd, void* addr);
 void munmap(mapid_t mapping);
 struct file_d* get_mapped_files (struct list *mapped_file, void *addr);
-
+bool check_consec_addr(void* addr, int file_length); 
 
 #endif /* userprog/syscall.h */

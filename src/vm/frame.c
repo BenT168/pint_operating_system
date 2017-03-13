@@ -8,6 +8,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 
 static struct hash frames;
 static struct lock frame_lock;
@@ -44,14 +45,17 @@ frame_init (void)
 
 /* TASK 3 : Evicts a frame and replaces it with a new one */
 void
-frame_evict (void)
+frame_evict ()
 {
   acquire_framelock();
+
   if (list_empty (&eviction_list)) {
     return;
   }
+
   struct list_elem *e = list_begin (&eviction_list);
   struct frame *victim = list_entry (e, struct frame, list_elem);
+
   while (pagedir_is_accessed (victim->thread->pagedir, victim->upage)) {
     pagedir_set_accessed (victim->thread->pagedir, victim->upage, false);
     e = list_next (e);
@@ -68,22 +72,55 @@ frame_evict (void)
     PANIC("Could not allocate a frame, but no frames are allocated");
   }
 
-  // TODO:  Accessed and Dirty Bit
+  // Accessed and Dirty (modified) Bit
+  struct page_table_entry* pte = get_page_table_entry(&victim->thread->sup_page_table
+  , victim->upage);
+  struct list_elem *elem = list_begin (&eviction_list);
+  victim = list_entry (elem, struct frame, list_elem);
 
+  while(true) {
+
+    if(!pagedir_is_dirty(victim->thread->pagedir, victim->upage)) {
+
+      if(pte->bit_set == SWAP_BIT) {
+        struct swap_slot* ss = (struct swap_slot*)malloc(sizeof(struct swap_slot));
+        ss->swap_frame = victim;
+        ss->swap_addr = (block_sector_t) victim->upage;
+        swap_store(ss);
+      } else if(pte->bit_set == MMAP_BIT) {
+        struct file* file = pte->page_sourcefile->filename;
+        size_t read_bytes =  pte->page_sourcefile->read_bytes;
+        size_t file_offset =  pte->page_sourcefile->file_offset;
+        file_write_at(file, victim, read_bytes, file_offset);
+      }
+      pte->loaded = false;
+      list_remove(elem);
+      palloc_free_page(victim->upage);
+      frame_free(victim);
+      return;
+    }
+
+    e = list_next (e);
+    if (e == list_end (&eviction_list)) {
+      e = list_begin (&eviction_list);
+    }
+    victim = list_entry (e, struct frame, list_elem);
+  }
 }
 
 /* TASK 3 : Allocates a new page, and adds it to the frame table */
 void*
-frame_get (void * upage, bool zero, bool writable)
+frame_get (void * upage, enum palloc_flags flags)
 {
-  void *kpage = palloc_get_page (PAL_USER | zero ? PAL_ZERO : 0 );
+  //void *kpage = palloc_get_page (PAL_USER | zero ? PAL_ZERO : 0 );
+  void* kpage = palloc_get_page(flags);
 
   /* evict a frame if not enough memory */
-  if (!kpage)
+  if (kpage == NULL)
   {
       acquire_framelock();
       frame_evict();
-      kpage = palloc_get_page(PAL_USER | zero ? PAL_ZERO : 0);
+      kpage = palloc_get_page(flags);
       release_framelock();
   }
   else
@@ -93,7 +130,7 @@ frame_get (void * upage, bool zero, bool writable)
       frame->addr = kpage;
       frame->upage = upage;
       frame->frame_sourcefile = malloc(sizeof(struct file_d));
-		  frame->writable = writable;
+		  frame->writable = false;
       frame->thread = thread_current();
       acquire_framelock();
       hash_insert(&frames, &frame->hash_elem);
