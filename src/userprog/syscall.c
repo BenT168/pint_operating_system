@@ -19,6 +19,9 @@
 #define MAX_SYSCALL_ARGS 3
 #define FILE_OPEN_FAILURE -1
 
+#define USER_VADDR_BOTTOM ((void *) 0x08048000)
+#define MAP_FAILED ((mapid_t) -1)
+
 static void check_memory_access(const void *);
 static void acquire_filelock (void);
 static void release_filelock (void);
@@ -37,6 +40,7 @@ static syscall_dispatcher syscall_map[MAX_NUM_SYSCALLS];
 
 /* TASK 2: File system lock, ensuring access to only one file at a time */
 static struct lock filelock;
+static struct lock mapid_lock;
 
 /* TASK 2: Checks that the pointer is legal:
      - checks that it is not a null pointer;
@@ -86,9 +90,12 @@ syscall_init (void)
   syscall_map[SYS_SEEK]     = (syscall_dispatcher) seek;
   syscall_map[SYS_TELL]     = (syscall_dispatcher) tell;
   syscall_map[SYS_CLOSE]    = (syscall_dispatcher) close;
+  syscall_map[SYS_MMAP]     = (syscall_dispatcher) mmap;
+  syscall_map[SYS_MUNMAP]   = (syscall_dispatcher) munmap;
 
   /* File system code is regarded as a critical section. */
   lock_init (&filelock);
+  lock_init(&mapid_lock);
 }
 
 /* TASK 2: This function parses the input system call code and redirects
@@ -139,11 +146,28 @@ exit (int status)
     list_push_back(&cur->parent->pid_to_exit_status, &pid_exit_status->elem);
   }
   cur->exit_status = status;
+  acquire_filelock();
 
   char *save_ptr;
   char *proper_thread_name = (char *) strtok_r (cur->name, " ", &save_ptr);
 
   printf ("%s: exit(%d)\n", proper_thread_name, status);
+
+  lock_acquire(&mapid_lock);
+  struct list *mmaps = &cur->mmapped_files;
+  struct list_elem *e = list_begin(mmaps);
+
+  while (e != list_end(mmaps)) {
+    struct vm_mmap *mmap = list_entry (e, struct vm_mmap, list_elem);
+
+      struct list_elem *next = list_next(e);
+
+      remove_page_mmap(mmap);
+
+      e = next;
+  }
+  lock_release(&mapid_lock);
+  release_filelock();
 
   thread_exit ();
 }
@@ -389,104 +413,108 @@ close (int fd)
 }
 
 /* TASK 3 : Mapping */
-mapid_t
-mmap(int fd, void* addr) {
 
+mapid_t mmap (int fd, void *addr) {
 
-  struct thread *curr = thread_current ();
-  struct file_handle *handle = thread_get_file_handle (&curr->file_list, fd);
+  struct thread *cur = thread_current ();
+  struct file_handle* handle = thread_get_file_handle(&cur->file_list, fd);
+	struct file *original = handle->file;
 
-  // fails if fd file has zero bytes
-  int file_len = file_length (handle->file);
-  if(file_len) {
-    return -1;
-  }
+	if (!original)
+		return -1;
 
-  //if address is not page aligned
-  if(pg_ofs(addr) != 0) {
-    return -1;
-  }
+	/* Get a  new reference of the file */
+	acquire_filelock();
+	struct file *f = file_reopen(original);
+	release_filelock();
 
-  // fail if addr = 0
-  if(addr == 0x0) {
-    return -1;
-  }
+	/* Get file size, -1 if filesize fails */
+	int read_bytes = filesize(fd);
+	if (read_bytes == -1)
+		return -1;
 
-  // fail if fd =0 or 1
-  if(fd == 0 || fd == 1) {
-    return -1;
-  }
+	if (!f || read_bytes == 0 || ((int) addr % PGSIZE) != 0 || addr == 0 ||
+			fd == STDIN_FILENO || fd == STDOUT_FILENO || !is_user_vaddr(addr))
+		return -1;
 
-  // fail f the range of pages mapped overlaps any existing set of mapped pages
-  if(!check_consec_addr(addr, file_len)) {
-    return -1;
-  }
+	off_t offs = 0;
 
-  // Now we map the file
-  struct mmap_file* mmap_file = (struct mmap_file*)malloc(sizeof(struct mmap_file));
-  mmap_file->file = handle->file;
-  mmap_file->mapid = curr->mapid++;
-  mmap_file->addr = addr;
+	lock_acquire(&mapid_lock);
 
-  int off = 0;
-  while(file_len > 0) {
-    size_t read_bytes;
-    if(file_len >= PGSIZE) {
-      read_bytes = PGSIZE;
-    } else {
-      read_bytes = file_len;
-    }
+	cur->mapid++;
+	while (read_bytes > 0) {
 
-    // try inserting file into page table entry
-    bool inserted = insert_mem_map_file(handle->file, off, addr, read_bytes, 0, false);
+		/* Calculate how to fill this page.
+		   We will read PAGE_READ_BYTES bytes from FILE
+		   and zero the final PAGE_ZERO_BYTES bytes. */
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-    if(!inserted) {
-      return -1;
-    }
-    file_len -= PGSIZE;
-    off +=PGSIZE;
-    addr += PGSIZE;
+		/* Add mmap to page table/ fail if mapping already exists */
+		if (!insert_mem_map_file(f, offs, addr, page_read_bytes, page_zero_bytes, NULL)) {
+			lock_release(&mapid_lock);
+			munmap(cur->mapid);
+			cur->mapid--;
+			return -1;
+		}
 
-    // Insert mmap file mapped file list
-    list_push_back (&curr->mmapped_files, &mmap_file->elem);
-  }
+	    /* Advance. */
+	    read_bytes -= page_read_bytes;
+	    offs += page_read_bytes;
+	    addr += PGSIZE;
+	}
 
-  return mmap_file->mapid;
+	lock_release(&mapid_lock);
+
+	return cur->mapid;
 }
 
-// check conscutive pages not mapped
-bool
-check_consec_addr(void* addr, int file_length) {
+void munmap (mapid_t mapping) {
+	lock_acquire(&mapid_lock);
 
-  struct thread* curr = thread_current ();
-  int off = 0;
+	struct thread *curr = thread_current();
+	struct list *mmaps = &curr->mmapped_files;
 
-  while(off < file_length) {
-    void* curr_addr = addr + off;
-    struct page_table_entry* pte = get_page_table_entry(&curr->sup_page_table,
-    curr_addr);
-    void* frame = pagedir_get_page(curr->pagedir, curr_addr);
-    // Check physical and virtual memory not used
-    if(pte != NULL || frame != NULL) {
-      return false;
-    }
-    off += PGSIZE;
-  }
-  return true;
+	struct list_elem *e = list_begin(mmaps);
+
+	while (e != list_end(mmaps)) {
+		struct vm_mmap *mmap = list_entry (e, struct vm_mmap, list_elem);
+
+		struct list_elem *next = list_next(e);
+
+		if (mmap->mapid == mapping) {
+			remove_page_mmap(mmap);
+		}
+
+		e = next;
+	}
+
+	lock_release(&mapid_lock);
 }
 
+void remove_page_mmap(struct vm_mmap *mmap) {
 
-void
-munmap (mapid_t mapping) {
+	struct thread *curr = thread_current();
 
-  struct thread* curr = thread_current ();
-  struct list* list = &curr->mmapped_files;
-  struct list_elem *e = list_begin (list);
+	struct page_table_entry *vm_p = mmap->vm_p;
+	if (vm_p->loaded) {
+		if (pagedir_is_dirty(curr->pagedir, vm_p->vaddr)) {
 
-  for(; e != list_end (list) ; e = list_next(e)) {
-    struct mmap_file *mmap_file = list_entry (e, struct mmap_file, elem);
-    if(mmap_file->mapid == mapping) {
-      list_remove (e);
-    }
-  }
+			/* Write to file if modified */
+			file_write_at(vm_p->page_sourcefile->filename,
+        vm_p->vaddr, vm_p->page_sourcefile->read_bytes,
+        vm_p->page_sourcefile->file_offset);
+		}
+
+		/* Free frames if they have been loaded */
+		frame_free(pagedir_get_page(curr->pagedir, vm_p->vaddr));
+		pagedir_clear_page(curr->pagedir, vm_p->vaddr);
+	}
+
+	/* Delete from hash page table and mmap list */
+	list_remove(&mmap->list_elem);
+	hash_delete(&curr->sup_page_table, &vm_p->elem);
+	/* Free page and mmap */
+	free(mmap->vm_p);
+	free(mmap);
 }

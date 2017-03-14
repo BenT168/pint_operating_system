@@ -27,7 +27,6 @@ void close (int fd);
 /* TASK 3 */
 mapid_t mmap(int fd, void* addr);
 void munmap(mapid_t mapping);
-struct file_d* get_mapped_files (struct list *mapped_file, void *addr);
-bool check_consec_addr(void* addr, int file_length); 
+void remove_page_mmap(struct vm_mmap *mmap);
 
 #endif /* userprog/syscall.h */

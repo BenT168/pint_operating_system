@@ -1,11 +1,10 @@
 #ifndef _VM_FRAME_H
 #define _VM_FRAME_H
 
-
-#include "threads/palloc.h"
 #include <hash.h>
 #include <list.h>
 #include <stdbool.h>
+#include "threads/palloc.h"
 
 struct frame
 {

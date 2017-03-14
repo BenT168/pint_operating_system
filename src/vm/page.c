@@ -12,9 +12,33 @@
 #include "vm/swap.h"
 #include "vm/frame.h"
 
+static struct lock page_lock;
 
-// Function needed for hash table
-unsigned
+/* Task 3 : Hash's helper functions to initialise */
+static unsigned page_hash_table(const struct hash_elem *h_elem, void *aux UNUSED);
+static bool is_lower_hash_elem(const struct hash_elem* a, const struct hash_elem* b, void *aux UNUSED);
+static void page_action_func (struct hash_elem *e, void *aux);
+
+static void acquire_pagelock (void);
+static void release_pagelock (void);
+
+/* TASK 3 : Acquires lock over sup page table */
+void
+acquire_pagelock (void)
+{
+  lock_acquire (&page_lock);
+}
+
+/* TASK 3 : Releases lock from sup page table */
+void
+release_pagelock (void)
+{
+  lock_release (&page_lock);
+}
+
+/* TASK 3 : Returns a hash value for a sub page table. Hashes the page table's address as
+   addresses should be unique. */
+static unsigned
 page_hash_table(const struct hash_elem *h_elem, void *aux UNUSED) {
   struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
@@ -24,10 +48,9 @@ page_hash_table(const struct hash_elem *h_elem, void *aux UNUSED) {
   return hash_int(hash);
 }
 
-
-// Function needed for hash table
-
-bool
+/* TASK 3 : Returns true if a hash table 'a' comes before hash table 'b'. Orders hash tables
+   by their addresses. */
+static bool
 is_lower_hash_elem(const struct hash_elem* a, const struct hash_elem* b, void *aux UNUSED) {
   const struct page_table_entry* pte_a;
   const struct page_table_entry* pte_b;
@@ -39,12 +62,33 @@ is_lower_hash_elem(const struct hash_elem* a, const struct hash_elem* b, void *a
 
 }
 
-// Initialise page table
+/* TASK 3 : Free sup page table */
+static void
+page_action_func (struct hash_elem *e, void *aux UNUSED) {
+	struct page_table_entry *vm_page = hash_entry(e, struct page_table_entry, elem);
+	free(vm_page);
+}
+
+/* TASK 3: Initialise page table */
 void
 page_table_init(struct hash* hash) {
   hash_init(hash, &page_hash_table, &is_lower_hash_elem, NULL);
 }
 
+/* TASK 3: Destroy page table */
+void
+page_table_destroy (struct hash *hash) {
+
+  struct hash_iterator iterator;
+	hash_first(&iterator, hash);
+
+	while (hash_next(&iterator)) {
+		struct page_table_entry *page = hash_entry(hash_cur(&iterator), struct page_table_entry, elem);
+		hash_delete(hash, &page->elem);
+	}
+
+	hash_destroy(hash, page_action_func);
+}
 
 // Get page table from hash table using key: virtual address
 struct page_table_entry*

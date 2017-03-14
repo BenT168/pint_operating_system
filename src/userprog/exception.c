@@ -204,6 +204,11 @@ page_fault (struct intr_frame *f)
 
 
   if (!load) {
+    printf ("Page fault at %p: %s error %s page in %s context.\n",
+			  fault_addr,
+			  not_present ? "not present" : "rights violation",
+			  write ? "writing" : "reading",
+			  user ? "user" : "kernel");
     kill (f); // kill if page is not loading
   }
   lock_release(&curr->sup_page_table_lock);

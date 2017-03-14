@@ -22,14 +22,14 @@ static void acquire_framelock (void);
 static void release_framelock (void);
 
 /* TASK 3 : Acquires lock over frame table */
-static void
+void
 acquire_framelock (void)
 {
   lock_acquire (&frame_lock);
 }
 
 /* TASK 3 : Releases lock from frame table */
-static void
+void
 release_framelock (void)
 {
   lock_release (&frame_lock);
@@ -67,7 +67,7 @@ frame_evict ()
   }
 
 
-  lock_release (&frame_lock);
+  release_framelock();
 
   if (!victim) {
     PANIC("Could not allocate a frame, but no frames are allocated");
@@ -151,12 +151,12 @@ frame_free (void * addr)
   frame_elem.addr = addr;
 
   if (found_frame) {
-      lock_acquire(&frame_lock);
+      acquire_framelock();
       struct frame *frame = hash_entry(found_frame, struct frame, hash_elem);
       list_remove (&frame->list_elem);
       palloc_free_page(frame->addr);
       hash_delete(&frames, &frame->hash_elem);
-      lock_release(&frame_lock);
+      release_framelock();
 		  if (frame->frame_sourcefile) {
 			     free(frame->frame_sourcefile);
 		  }

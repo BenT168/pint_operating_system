@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 
 #define MAX_ARGS 50
 
@@ -89,6 +90,11 @@ start_process (void *file_name_)
 
   /* TASK 3 : Initialise supplementary page table */
   page_table_init(&thread_current()->sup_page_table);
+  list_init(&thread_current()->mmapped_files);
+  thread_current()->mapid = 0;
+
+  /* TASK 3 : Initialise swap elements */
+  swap_init();
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -236,13 +242,17 @@ process_exit (void)
     file_close (cur->file);
   }
 
+  /* TASK 2: unblock parent thread */
+  sema_up (&cur->alive_sema);
+
+  /* TASK 3: remove the supplementary page table */
+  page_table_destroy(&cur->sup_page_table);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL)
     {
-      /* TASK 2: unblock parent thread */
-      sema_up (&cur->alive_sema);
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
@@ -339,10 +349,10 @@ struct Elf32_Phdr
 
 static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
-static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
+static bool load_segment_ori (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
-static bool load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
+static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
@@ -438,7 +448,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment_vm (file, file_page, (void *) mem_page,
+              if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -530,8 +540,9 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
 
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
+
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
+load_segment_ori (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -578,7 +589,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 
 static bool
-load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
+load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		     uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -617,7 +628,7 @@ load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp)
 {
-  uint8_t *kpage;
+  /*uint8_t *kpage;
   bool success = false;
 
   kpage = frame_get (PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
@@ -629,6 +640,13 @@ setup_stack (void **esp)
       else
         palloc_free_page (kpage);
     }
+  return success;*/
+  bool success = false;
+
+  success = grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
+  if (success) {
+      *esp = PHYS_BASE;
+  }
   return success;
 }
 

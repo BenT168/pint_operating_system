@@ -14,19 +14,22 @@
 static struct block *swap_space;
 static struct lock swap_lock;
 static struct bitmap * swap_bitmap;
+
 unsigned swap_size;
 
+static void acquire_swaplock (void);
+static void release_swaplock (void);
 block_sector_t swap_get_free(void);
 
 /* TASK 3 : Acquires lock over swap table */
-static void
+void
 acquire_swaplock (void)
 {
   lock_acquire (&swap_lock);
 }
 
 /* TASK 3 : Releases lock from swap table */
-static void
+void
 release_swaplock (void)
 {
   lock_release (&swap_lock);

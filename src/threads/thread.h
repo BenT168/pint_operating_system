@@ -26,7 +26,7 @@ typedef int pid_t;
 /* TASK 3: Map id */
 typedef int mapid_t;
 
-
+#define MAP_FAILED ((mapid_t) -1)       /* Error value for mapid_t. */
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -120,7 +120,7 @@ struct thread
 
     /* TASK 2 */
     pid_t pid;                        /* Unique process identification */
-    struct file *file;                /* Pointer to execuable file where
+    struct file *file;                /* Pointer to executable file where
                                          process run */
     bool child_load_success;          /* True if the last process executed
                                          by this thread load successfully */
