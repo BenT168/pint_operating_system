@@ -19,6 +19,7 @@ struct page_table_entry {
 
   int bit_set;
   int swap_index;
+  mapid_t mapid;
 
   void* phys_addr;                     /* page's physical memory address */
   void *vaddr;                         /* page's user virtual memory address */
@@ -30,15 +31,15 @@ struct page_table_entry {
   bool alive;
 
   struct hash_elem elem;
+  struct list_elem list_elem;
 };
 
 /* TASK 3: Struct for virtual memory's mapped info. */
 struct vm_mmap
   {
     mapid_t mapid;                 /* Unique memory mapped identification */
-    struct page_table_entry *vm_p; /* Pointer to the executing sup page table */
-    struct list_elem list_elem;    /* Used to put the struct in thread list's
-                                      return status */
+    struct page_table_entry *pte; /* Pointer to the executing sup page table */
+    struct list_elem list_elem;
   };
 
 void page_table_init(struct hash* page_table_hash);
@@ -51,6 +52,7 @@ bool load_mem_map_file(struct page_table_entry* pte);
 bool insert_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 bool insert_mem_map_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 bool grow_stack(void* vaddr);
+bool check_mmap(struct page_table_entry *pte);
 void free_pte(struct page_table_entry* pte);
 
 

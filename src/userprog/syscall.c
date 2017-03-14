@@ -496,25 +496,25 @@ void remove_page_mmap(struct vm_mmap *mmap) {
 
 	struct thread *curr = thread_current();
 
-	struct page_table_entry *vm_p = mmap->vm_p;
-	if (vm_p->loaded) {
-		if (pagedir_is_dirty(curr->pagedir, vm_p->vaddr)) {
+	struct page_table_entry *pte = mmap->pte;
+	if (pte->loaded) {
+		if (pagedir_is_dirty(curr->pagedir, pte->vaddr)) {
 
 			/* Write to file if modified */
-			file_write_at(vm_p->page_sourcefile->filename,
-        vm_p->vaddr, vm_p->page_sourcefile->read_bytes,
-        vm_p->page_sourcefile->file_offset);
+			file_write_at(pte->page_sourcefile->filename,
+        pte->vaddr, pte->page_sourcefile->read_bytes,
+        pte->page_sourcefile->file_offset);
 		}
 
 		/* Free frames if they have been loaded */
-		frame_free(pagedir_get_page(curr->pagedir, vm_p->vaddr));
-		pagedir_clear_page(curr->pagedir, vm_p->vaddr);
+		frame_free(pagedir_get_page(curr->pagedir, pte->vaddr));
+		pagedir_clear_page(curr->pagedir, pte->vaddr);
 	}
 
 	/* Delete from hash page table and mmap list */
 	list_remove(&mmap->list_elem);
-	hash_delete(&curr->sup_page_table, &vm_p->elem);
+	hash_delete(&curr->sup_page_table, &pte->elem);
 	/* Free page and mmap */
-	free(mmap->vm_p);
+	free(mmap->pte);
 	free(mmap);
 }

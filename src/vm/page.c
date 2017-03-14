@@ -65,8 +65,8 @@ is_lower_hash_elem(const struct hash_elem* a, const struct hash_elem* b, void *a
 /* TASK 3 : Free sup page table */
 static void
 page_action_func (struct hash_elem *e, void *aux UNUSED) {
-	struct page_table_entry *vm_page = hash_entry(e, struct page_table_entry, elem);
-	free(vm_page);
+	struct page_table_entry *pte = hash_entry(e, struct page_table_entry, elem);
+	free(pte);
 }
 
 /* TASK 3: Initialise page table */
@@ -214,29 +214,43 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
   struct thread* curr = thread_current();
   struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
-  if(pte != NULL) {
-    pte->bit_set = FILE_BIT;
-    pte->vaddr = upage;
+  pte->bit_set = FILE_BIT;
+  pte->vaddr = upage;
 
-    struct file_d* file_d = (struct file_d*)malloc(sizeof(struct file_d));
-    file_d->filename = file;
-    file_d->file_offset = offset;
-    file_d->content_len = file_length(file);
-    file_d->read_bytes = read_bytes;
-    file_d->zero_bytes = zero_bytes;
+  struct file_d* file_d = (struct file_d*)malloc(sizeof(struct file_d));
+  file_d->filename = file;
+  file_d->file_offset = offset;
+  file_d->content_len = file_length(file);
+  file_d->read_bytes = read_bytes;
+  file_d->zero_bytes = zero_bytes;
 
-    pte->page_sourcefile = file_d;
-    pte->loaded = false;
-    pte->writable = writable;
+  pte->page_sourcefile = file_d;
 
-    struct hash_elem* h_elem = hash_insert(&curr->sup_page_table, &pte->elem);
-    if(h_elem == NULL) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-  return false;
+  switch (FILE_BIT) {
+		case 0:
+				pte->writable = writable;
+				pte->loaded = false;
+				break;
+		case 1:
+				pte->writable = writable;
+				pte->loaded = false;
+				break;
+		case 2:
+				pte->writable = true;
+				pte->loaded = false;
+				pte->mapid = curr->mapid;
+				if (!check_mmap(pte)) {
+					free(pte);
+					return false;
+				}
+				break;
+	}
+
+  acquire_pagelock();
+  struct hash_elem* h_elem = hash_insert(&curr->sup_page_table, &pte->elem);
+  release_pagelock();
+
+  return h_elem == NULL;
 }
 
 
@@ -305,6 +319,25 @@ grow_stack(void* vaddr) {
       return true;
     }
     return false;
+}
+
+bool
+check_mmap(struct page_table_entry *pte) {
+	struct thread *cur = thread_current();
+	struct list *mmaps = &cur->mmapped_files;
+
+	struct vm_mmap *mmap = malloc(sizeof(struct vm_mmap));
+
+	if (!mmap) {
+		return false;
+	}
+
+	mmap->mapid = cur->mapid;
+	mmap->pte = pte;
+
+	list_push_back (mmaps, &(mmap->list_elem));
+
+	return true;
 }
 
 // Freeing supplementary page table entry

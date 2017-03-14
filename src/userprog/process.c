@@ -349,10 +349,10 @@ struct Elf32_Phdr
 
 static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
-static bool load_segment_ori (struct file *file, off_t ofs, uint8_t *upage,
+static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
-static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
+static bool load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
@@ -542,7 +542,7 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    or disk read error occurs. */
 
 static bool
-load_segment_ori (struct file *file, off_t ofs, uint8_t *upage,
+load_segment (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -589,7 +589,7 @@ load_segment_ori (struct file *file, off_t ofs, uint8_t *upage,
 
 
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
+load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
 		     uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);

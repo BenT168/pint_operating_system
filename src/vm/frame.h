@@ -15,7 +15,6 @@ struct frame
                                           file */
   bool writable;                       /* boolean checking whether the frame
                                           table is writable */
-  struct hash_elem hash_elem;         /* hash elem for all frame list */
   struct list_elem list_elem;
 };
 
@@ -29,8 +28,9 @@ struct file_d
 };
 
 void frame_init (void);
-void frame_evict (void);
-void* frame_get(void * upage, enum palloc_flags flags);
+void frame_evict (enum palloc_flags flags);
+void* frame_alloc(void * upage, enum palloc_flags flags);
+struct frame* frame_get(void *addr);
 void frame_free (void * addr);
 
 #endif /* vm/frame.h */

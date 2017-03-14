@@ -7,17 +7,14 @@
 #include "threads/palloc.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include "vm/page.h"
 #include "vm/swap.h"
 
-static struct hash frames;
 static struct lock frame_lock;
 static struct list eviction_list;
 
 /* Task 3 : Frames helper functions to initialise */
-static bool frame_less (const struct hash_elem *a, const struct hash_elem *b, void *aux);
-static unsigned frame_hash (const struct hash_elem *e, void *aux);
-
 static void acquire_framelock (void);
 static void release_framelock (void);
 
@@ -39,14 +36,13 @@ release_framelock (void)
 void
 frame_init (void)
 {
-  hash_init(&frames, frame_hash, frame_less, NULL);
   list_init(&eviction_list);
   lock_init(&frame_lock);
 }
 
 /* TASK 3 : Evicts a frame and replaces it with a new one */
 void
-frame_evict ()
+frame_evict (enum palloc_flags flags)
 {
   acquire_framelock();
 
@@ -69,10 +65,6 @@ frame_evict ()
 
   release_framelock();
 
-  if (!victim) {
-    PANIC("Could not allocate a frame, but no frames are allocated");
-  }
-
   // Accessed and Dirty (modified) Bit
   struct page_table_entry* pte = get_page_table_entry(&victim->thread->sup_page_table
   , victim->upage);
@@ -89,10 +81,8 @@ frame_evict ()
         ss->swap_addr = (block_sector_t) victim->upage;
         swap_store(ss);
       } else if(pte->bit_set == MMAP_BIT) {
-        struct file* file = pte->page_sourcefile->filename;
-        size_t read_bytes =  pte->page_sourcefile->read_bytes;
-        size_t file_offset =  pte->page_sourcefile->file_offset;
-        file_write_at(file, victim, read_bytes, file_offset);
+        munmap(pte->mapid);
+        goto mmap;
       }
       pte->loaded = false;
       list_remove(elem);
@@ -107,37 +97,39 @@ frame_evict ()
     }
     victim = list_entry (e, struct frame, list_elem);
   }
+
+  mmap:
+	victim = palloc_get_page(flags);
+
+	if (!victim) {
+		PANIC("Eviction Failed\n");
+	}
 }
 
 /* TASK 3 : Allocates a new page, and adds it to the frame table */
 void*
-frame_get (void * upage, enum palloc_flags flags)
+frame_alloc (void * upage, enum palloc_flags flags)
 {
   //void *kpage = palloc_get_page (PAL_USER | zero ? PAL_ZERO : 0 );
   void* kpage = palloc_get_page(flags);
 
+  acquire_framelock();
+
   /* evict a frame if not enough memory */
-  if (kpage == NULL)
-  {
-      acquire_framelock();
-      frame_evict();
-      kpage = palloc_get_page(flags);
-      release_framelock();
-  }
-  else
-  {
-      /* build up the frame */
-      struct frame *frame = malloc(sizeof(struct frame));
-      frame->addr = kpage;
-      frame->upage = upage;
-      frame->frame_sourcefile = malloc(sizeof(struct file_d));
-		  frame->writable = false;
-      frame->thread = thread_current();
-      acquire_framelock();
-      hash_insert(&frames, &frame->hash_elem);
-      list_push_back (&eviction_list, &frame->list_elem);
-      release_framelock();
-  }
+  if (kpage == NULL) frame_evict(flags);
+
+  /* build up the frame */
+  struct frame *frame = malloc(sizeof(struct frame));
+  frame->addr = kpage;
+  frame->upage = upage;
+  frame->frame_sourcefile = malloc(sizeof(struct file_d));
+  frame->writable = false;
+  frame->thread = thread_current();
+
+  /* Initialize frame's page list */
+  list_push_back (&eviction_list, &frame->list_elem);
+
+  release_framelock();
   return kpage;
 }
 
@@ -146,39 +138,26 @@ frame_get (void * upage, enum palloc_flags flags)
 void
 frame_free (void * addr)
 {
-  struct frame frame_elem;
-  struct hash_elem * found_frame = hash_find(&frames, &frame_elem.hash_elem);
-  frame_elem.addr = addr;
-
-  if (found_frame) {
-      acquire_framelock();
-      struct frame *frame = hash_entry(found_frame, struct frame, hash_elem);
-      list_remove (&frame->list_elem);
-      palloc_free_page(frame->addr);
-      hash_delete(&frames, &frame->hash_elem);
-      release_framelock();
-		  if (frame->frame_sourcefile) {
-			     free(frame->frame_sourcefile);
-		  }
-		  free(frame);
-   }
+  acquire_framelock();
+  struct frame *frame = frame_get(addr);
+  list_remove (&frame->list_elem);
+  palloc_free_page(addr);
+  release_framelock();
+  if (frame->frame_sourcefile) {
+	     free(frame->frame_sourcefile);
+  }
+  free(frame);
 }
 
-/* TASK 3 : Returns true if a frame 'a' comes before frame 'b'. Orders frames
-   by their addresses. */
-static bool
-frame_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED)
-{
-	const struct frame * a = hash_entry(a_, struct frame, hash_elem);
-	const struct frame * b = hash_entry(b_, struct frame, hash_elem);
-	return a->upage < b->upage;
-}
-
-/* TASK 3 : Returns a hash value for a frame. Hashes the frame's address as
-   addresses should be unique. */
-static unsigned
-frame_hash(const struct hash_elem *fe, void *aux UNUSED)
-{
-	const struct frame * frame = hash_entry(fe, struct frame, hash_elem);
-	return hash_int((unsigned) frame->upage);
+/* TASK 3: Returns pointer to vm_frame given kernel address */
+struct frame* frame_get(void *addr) {
+	struct list_elem *elem;
+	for (elem = list_begin(&eviction_list); elem != list_end(&eviction_list);
+		 elem = list_next(elem)) {
+			struct frame *fr = list_entry(elem, struct frame, list_elem);
+			if(fr->addr == addr) {
+				return fr;
+			}
+	}
+	return NULL;
 }
