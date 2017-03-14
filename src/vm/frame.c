@@ -14,6 +14,7 @@ static struct hash frames;
 static struct lock frame_lock;
 static struct list eviction_list;
 
+/* Task 3 : Frames helper functions to initialise */
 static bool frame_less (const struct hash_elem *a, const struct hash_elem *b, void *aux);
 static unsigned frame_hash (const struct hash_elem *e, void *aux);
 

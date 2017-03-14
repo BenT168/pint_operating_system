@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #define PGSIZE 4096
+#define NBR_BLOCKS (PGSIZE / BLOCK_SECTOR_SIZE)
 
 static struct block *swap_space;
 static struct lock swap_lock;
@@ -45,6 +46,10 @@ swap_init ()
   lock_init(&swap_lock);
 
   swap_bitmap = bitmap_create (swap_size);
+
+  acquire_swaplock();
+	bitmap_set_all(swap_bitmap, 0);
+	release_swaplock();
 }
 
 /* TASK 3: Construct the swap slot and dereference to frame */
@@ -66,7 +71,7 @@ block_sector_t swap_get_free ()
     PANIC("SWAP id full! Memory exhausted!");
     //return NULL;
   }
-  return bitmap_scan_and_flip (swap_bitmap, 0, PGSIZE / BLOCK_SECTOR_SIZE, NULL);
+  return bitmap_scan_and_flip (swap_bitmap, 0, NBR_BLOCKS, NULL);
 }
 
 /* TASK 3 : Load the swapping address by reading the block device */
@@ -77,7 +82,7 @@ swap_load (void *upageaddr, struct swap_slot* ss)
   for (int i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++) {
     block_read (swap_space, ss->swap_addr + i, upageaddr + i * BLOCK_SECTOR_SIZE);
   }
-  bitmap_set_multiple (swap_bitmap, ss->swap_addr, PGSIZE / BLOCK_SECTOR_SIZE, NULL);
+  bitmap_set_multiple (swap_bitmap, ss->swap_addr, NBR_BLOCKS, NULL);
   release_swaplock();
 }
 
@@ -88,7 +93,7 @@ swap_store (struct swap_slot * ss)
 {
   acquire_swaplock();
   block_sector_t swap_addr = swap_get_free();
-  for (int i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++)
+  for (int i = 0; i < NBR_BLOCKS; i++)
   {
     block_write (swap_space, swap_addr + i, ss->swap_frame->upage + i *BLOCK_SECTOR_SIZE);
   }
@@ -100,6 +105,6 @@ void
 swap_free (struct swap_slot* ss)
 {
   acquire_swaplock();
-  bitmap_set_multiple (swap_bitmap, ss->swap_addr, PGSIZE / BLOCK_SECTOR_SIZE, false);
+  bitmap_set_multiple (swap_bitmap, ss->swap_addr, NBR_BLOCKS, false);
   release_swaplock();
 }

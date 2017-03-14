@@ -35,14 +35,14 @@ is_lower_hash_elem(const struct hash_elem* a, const struct hash_elem* b, void *a
   pte_a = hash_entry(a, struct page_table_entry, elem);
   pte_b = hash_entry(b, struct page_table_entry, elem);
 
-  return pte_a < pte_b;
+  return pte_a->vaddr < pte_b->vaddr;
 
 }
 
 // Initialise page table
 void
 page_table_init(struct hash* hash) {
-  hash_init(hash, page_hash_table, is_lower_hash_elem, NULL);
+  hash_init(hash, &page_hash_table, &is_lower_hash_elem, NULL);
 }
 
 
@@ -268,7 +268,8 @@ void
 free_pte(struct page_table_entry* pte) {
   free(pte->vaddr);
   free(pte->phys_addr);
-
-  free(pte->page_sourcefile);
+  if (pte->page_sourcefile) {
+       free(pte->page_sourcefile);
+  }
 
 }
