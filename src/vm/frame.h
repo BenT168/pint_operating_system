@@ -22,7 +22,6 @@ struct file_d
 {
   struct file *filename;
   int file_offset;
-  int content_len;
   size_t read_bytes;
   size_t zero_bytes;
 };

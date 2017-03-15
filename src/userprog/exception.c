@@ -183,8 +183,10 @@ page_fault (struct intr_frame *f)
 
   /* TASK 3 : TO COMMENT */
 
+  lock_init (&page_lock);
+
   struct thread* curr = thread_current();
-  lock_acquire(&curr->sup_page_table_lock);
+  lock_acquire(&page_lock);
 
   void* vaddr = pg_round_down(fault_addr);
 
@@ -192,12 +194,12 @@ page_fault (struct intr_frame *f)
 
   bool load = false;
 
+  if(pte->loaded) {
+    load = true;
+  }
+
   if(pte != NULL && !pte->loaded) {
-    switch (pte->bit_set) {
-      case FILE_BIT: load = load_file(pte); break;
-      case SWAP_BIT: load = load_swap(pte); break;
-      case MMAP_BIT: load =  load_mem_map_file(pte); break;
-    }
+    load = load_page(pte);
   } else if(pte == NULL && is_stack_access(fault_addr, f->esp)) {
       load = grow_stack(fault_addr);
   }
@@ -211,5 +213,5 @@ page_fault (struct intr_frame *f)
 			  user ? "user" : "kernel");
     kill (f); // kill if page is not loading
   }
-  lock_release(&curr->sup_page_table_lock);
+  lock_release(&page_lock);
 }

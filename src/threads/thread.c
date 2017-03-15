@@ -99,6 +99,7 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
 
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -243,8 +244,10 @@ thread_create (const char *name, int priority,
   list_push_back (&thread_current()->child_procs, &child->child_elem);
   #endif
 
-  /* TASK 3 */
-  // initialise threead mapid for memory mapped files 
+  /* TASK 3: Initialise Supplenemary page table */
+  page_table_init(&t->sup_page_table);
+  list_init(&t->mmapped_files);
+  frame_init();
   t->mapid = 0;
 
   return tid;
@@ -586,6 +589,8 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->nice = NICE_DEFAULT;
   t->cpu_num = CPU_NUM_DEFAULT;
+
+
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

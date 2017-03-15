@@ -44,7 +44,7 @@ frame_init (void)
 void
 frame_evict (enum palloc_flags flags)
 {
-  acquire_framelock();
+  //acquire_framelock();
 
   if (list_empty (&eviction_list)) {
     return;
@@ -63,7 +63,7 @@ frame_evict (enum palloc_flags flags)
   }
 
 
-  release_framelock();
+  //release_framelock();
 
   // Accessed and Dirty (modified) Bit
   struct page_table_entry* pte = get_page_table_entry(&victim->thread->sup_page_table
@@ -73,7 +73,7 @@ frame_evict (enum palloc_flags flags)
 
   while(true) {
 
-    if(!pagedir_is_dirty(victim->thread->pagedir, victim->upage)) {
+    if(pagedir_is_dirty(victim->thread->pagedir, victim->upage)) {
 
       if(pte->bit_set == SWAP_BIT) {
         struct swap_slot* ss = (struct swap_slot*)malloc(sizeof(struct swap_slot));
@@ -82,7 +82,7 @@ frame_evict (enum palloc_flags flags)
         swap_store(ss);
       } else if(pte->bit_set == MMAP_BIT) {
         munmap(pte->mapid);
-        goto mmap;
+        //goto mmap;
       }
       pte->loaded = false;
       list_remove(elem);
@@ -97,13 +97,6 @@ frame_evict (enum palloc_flags flags)
     }
     victim = list_entry (e, struct frame, list_elem);
   }
-
-  mmap:
-	victim = palloc_get_page(flags);
-
-	if (!victim) {
-		PANIC("Eviction Failed\n");
-	}
 }
 
 /* TASK 3 : Allocates a new page, and adds it to the frame table */
@@ -111,15 +104,20 @@ void*
 frame_alloc (void * upage, enum palloc_flags flags)
 {
   //void *kpage = palloc_get_page (PAL_USER | zero ? PAL_ZERO : 0 );
+
   void* kpage = palloc_get_page(flags);
 
-  acquire_framelock();
+  //acquire_framelock();
 
   /* evict a frame if not enough memory */
   if (kpage == NULL) frame_evict(flags);
 
+  if(frame_get(kpage) != NULL) {
+      return kpage;
+  }
+
   /* build up the frame */
-  struct frame *frame = malloc(sizeof(struct frame));
+  struct frame *frame = (struct frame*)malloc(sizeof(struct frame));
   frame->addr = kpage;
   frame->upage = upage;
   frame->frame_sourcefile = malloc(sizeof(struct file_d));
@@ -129,7 +127,7 @@ frame_alloc (void * upage, enum palloc_flags flags)
   /* Initialize frame's page list */
   list_push_back (&eviction_list, &frame->list_elem);
 
-  release_framelock();
+  //release_framelock();
   return kpage;
 }
 
@@ -138,11 +136,11 @@ frame_alloc (void * upage, enum palloc_flags flags)
 void
 frame_free (void * addr)
 {
-  acquire_framelock();
+  //acquire_framelock();
   struct frame *frame = frame_get(addr);
   list_remove (&frame->list_elem);
   palloc_free_page(addr);
-  release_framelock();
+  //release_framelock();
   if (frame->frame_sourcefile) {
 	     free(frame->frame_sourcefile);
   }

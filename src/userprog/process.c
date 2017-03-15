@@ -88,13 +88,10 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  /* TASK 3 : Initialise supplementary page table */
-  page_table_init(&thread_current()->sup_page_table);
-  list_init(&thread_current()->mmapped_files);
-  thread_current()->mapid = 0;
-
   /* TASK 3 : Initialise swap elements */
   swap_init();
+  lock_init (&page_lock);
+
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -143,6 +140,8 @@ start_process (void *file_name_)
   if_.esp -= sizeof(char*);
   *((char**) if_.esp) = NULL;
 
+
+
   /* TASK 2 : Push pointers to the argument */
   for (i = size - 1; i >= 0; --i) {
    if_.esp -= sizeof(char*);
@@ -153,9 +152,11 @@ start_process (void *file_name_)
   if_.esp -= sizeof(char**);
   *((void**) if_.esp) = if_.esp + sizeof(char**);
 
+
   /* TASK 2 : Push the number of argument */
   if_.esp -= sizeof(int);
   *((int*) if_.esp) = size;
+
 
   /* TASK 2 : Push a fake return address (0) */
   if_.esp -= sizeof(void (*) (void));
@@ -448,7 +449,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
+              if (!load_segment_vm (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -608,7 +609,9 @@ load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
       bool file_inserted = insert_file (file, ofs, upage, page_read_bytes,
                                  page_zero_bytes, writable);
 
+
       if (!file_inserted) {
+        printf("Failed file insert in load_segemnt_vm\n");
         return false;
       }
 
@@ -628,26 +631,21 @@ load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp)
 {
-  /*uint8_t *kpage;
-  bool success = false;
+   bool success = false;
 
-  kpage = frame_get (PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
-  if (kpage != NULL)
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else
-        palloc_free_page (kpage);
-    }
-  return success;*/
-  bool success = false;
-
-  success = grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
-  if (success) {
+  uint8_t *kpage;
+  kpage = frame_alloc (PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
+  //printf("kpage: %d\n", kpage);
+  if(kpage != NULL) {
+    success = grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
+    if (success) {
       *esp = PHYS_BASE;
+    } else {
+      frame_free(kpage);
+    }
+    return success;
   }
-  return success;
+
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

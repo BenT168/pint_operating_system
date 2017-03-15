@@ -464,6 +464,13 @@ mapid_t mmap (int fd, void *addr) {
 	    addr += PGSIZE;
 	}
 
+  //Insert map in mapping file
+  struct vm_mmap* map = (struct vm_mmap*)malloc(sizeof(struct vm_mmap));
+  map->mapid = cur->mapid;
+  map->pte = get_page_table_entry(&cur->sup_page_table, addr);
+
+  list_push_back(&cur->mmapped_files, &map->list_elem);
+
 	lock_release(&mapid_lock);
 
 	return cur->mapid;

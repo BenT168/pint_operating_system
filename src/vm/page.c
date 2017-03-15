@@ -12,7 +12,6 @@
 #include "vm/swap.h"
 #include "vm/frame.h"
 
-static struct lock page_lock;
 
 /* Task 3 : Hash's helper functions to initialise */
 static unsigned page_hash_table(const struct hash_elem *h_elem, void *aux UNUSED);
@@ -72,7 +71,10 @@ page_action_func (struct hash_elem *e, void *aux UNUSED) {
 /* TASK 3: Initialise page table */
 void
 page_table_init(struct hash* hash) {
-  hash_init(hash, &page_hash_table, &is_lower_hash_elem, NULL);
+//  acquire_pagelock();
+  hash_init(hash, &page_hash_table, is_lower_hash_elem, NULL);
+  lock_init (&page_lock);
+//  release_pagelock();
 }
 
 /* TASK 3: Destroy page table */
@@ -106,22 +108,38 @@ get_page_table_entry(struct hash* hash_table, void* vaddr) {
 }
 
 // Insert page table entry in hash table
-void
+bool
 insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte) {
   if(pte == NULL) {
-    return;
+    return false;
   }
 
-  hash_insert(hash_table, &pte->elem);
+  bool res = false;
+  //acquire_pagelock();
+  if(!hash_insert(hash_table, &pte->elem)) {
+    res = true;
+  }
+  //release_pagelock();
+
+  return res;
 }
 
 
+bool
+load_page(struct page_table_entry* pte) {
+  bool res = false;
+  switch (pte->bit_set) {
+    case FILE_BIT :
+    case MMAP_BIT: res = load_file(pte); break;
+    case SWAP_BIT : res =  load_swap(pte); break;
+  }
+
+  return res;
+
+}
 // Load page from file_d in page table
 bool
 load_file(struct page_table_entry* pte) {
-  if (pte->bit_set != FILE_BIT) {
-    return false;
-  }
 
   struct file_d* file_d = pte->page_sourcefile;
   struct file* file = file_d->filename;
@@ -200,11 +218,6 @@ load_swap(struct page_table_entry* pte) {
   return true;
 }
 
-// load memory mapped files
-bool
-load_mem_map_file(struct page_table_entry* pte) {
-  return load_file(pte);
-}
 
 // Inserts file in page table
 bool
@@ -214,43 +227,24 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
   struct thread* curr = thread_current();
   struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
+  if(pte == NULL) {
+    return false;
+  }
+
   pte->bit_set = FILE_BIT;
   pte->vaddr = upage;
 
   struct file_d* file_d = (struct file_d*)malloc(sizeof(struct file_d));
   file_d->filename = file;
   file_d->file_offset = offset;
-  file_d->content_len = file_length(file);
   file_d->read_bytes = read_bytes;
   file_d->zero_bytes = zero_bytes;
 
   pte->page_sourcefile = file_d;
+  pte->loaded = false;
+  pte->writable = writable;
 
-  switch (FILE_BIT) {
-		case 0:
-				pte->writable = writable;
-				pte->loaded = false;
-				break;
-		case 1:
-				pte->writable = writable;
-				pte->loaded = false;
-				break;
-		case 2:
-				pte->writable = true;
-				pte->loaded = false;
-				pte->mapid = curr->mapid;
-				if (!check_mmap(pte)) {
-					free(pte);
-					return false;
-				}
-				break;
-	}
-
-  acquire_pagelock();
-  struct hash_elem* h_elem = hash_insert(&curr->sup_page_table, &pte->elem);
-  release_pagelock();
-
-  return h_elem == NULL;
+  return insert_page_table_entry(&curr->sup_page_table, pte);
 }
 
 
@@ -262,29 +256,30 @@ insert_mem_map_file(struct file* file, off_t offset, uint8_t *upage,
   struct thread* curr = thread_current();
   struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
-  if(pte != NULL) {
+  if(pte == NULL) {
+    return false;
+  }
+
     pte->bit_set = MMAP_BIT;
     pte->vaddr = upage;
 
     struct file_d* file_d = (struct file_d*)malloc(sizeof(struct file_d));
     file_d->filename = file;
     file_d->file_offset = offset;
-    file_d->content_len = file_length(file);
     file_d->read_bytes = read_bytes;
     file_d->zero_bytes = zero_bytes;
 
     pte->page_sourcefile = file_d;
     pte->loaded = false;
     pte->writable = writable;
+    pte->mapid = curr->mapid;
 
-    struct hash_elem* h_elem = hash_insert(&curr->sup_page_table, &pte->elem);
-    if(h_elem == NULL) {
-      return true;
-    } else {
+    if (!check_mmap(pte)) {
+      free(pte);
       return false;
     }
-  }
-  return false;
+
+    return insert_page_table_entry(&curr->sup_page_table, pte);
 }
 
 // Function for stack growth
@@ -293,7 +288,10 @@ grow_stack(void* vaddr) {
   struct thread* curr = thread_current();
   struct page_table_entry *pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
-  if (pte != NULL) {
+  if (pte == NULL) {
+    return false;
+  }
+
     void* round_vaddr = pg_round_down(vaddr);
     pte->vaddr = round_vaddr;
     pte->loaded = true;
@@ -306,20 +304,20 @@ grow_stack(void* vaddr) {
       free_pte(pte);
       return false;
     }
+
     bool set_page = pagedir_set_page(curr->pagedir, round_vaddr, frame, pte->writable);
+
     if(!set_page) {
       free_pte(pte);
       frame_free(frame);
       return false;
     }
-  } else {
-    return false;
-  }
+
     if(hash_insert(&thread_current()->sup_page_table, &pte->elem) == NULL) {
       return true;
     }
-    return false;
-}
+
+  }
 
 bool
 check_mmap(struct page_table_entry *pte) {
@@ -335,7 +333,7 @@ check_mmap(struct page_table_entry *pte) {
 	mmap->mapid = cur->mapid;
 	mmap->pte = pte;
 
-	list_push_back (mmaps, &(mmap->list_elem));
+	list_push_back (mmaps, &mmap->list_elem);
 
 	return true;
 }

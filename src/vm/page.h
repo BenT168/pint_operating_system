@@ -15,6 +15,8 @@
 #define FILE_BIT 1
 #define MMAP_BIT 2
 
+static struct lock page_lock;
+
 struct page_table_entry {
 
   int bit_set;
@@ -31,7 +33,6 @@ struct page_table_entry {
   bool alive;
 
   struct hash_elem elem;
-  struct list_elem list_elem;
 };
 
 /* TASK 3: Struct for virtual memory's mapped info. */
@@ -45,10 +46,10 @@ struct vm_mmap
 void page_table_init(struct hash* page_table_hash);
 void page_table_destroy (struct hash *hash);
 struct page_table_entry* get_page_table_entry(struct hash* hash_table, void* vaddr);
-void insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte);
+bool insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte);
+bool load_page(struct page_table_entry* pte);
 bool load_file(struct page_table_entry* pte);
 bool load_swap(struct page_table_entry* pte);
-bool load_mem_map_file(struct page_table_entry* pte);
 bool insert_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 bool insert_mem_map_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 bool grow_stack(void* vaddr);
