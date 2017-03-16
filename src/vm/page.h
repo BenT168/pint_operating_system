@@ -30,7 +30,6 @@ struct page_table_entry {
   bool writable;                       /* boolean checking whether the page
                                           table is writable */
   bool loaded;
-  bool alive;
 
   struct hash_elem elem;
 };

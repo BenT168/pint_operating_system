@@ -356,7 +356,7 @@ static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
-static bool load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
+static bool load_segment_ori (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
@@ -482,6 +482,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  success_done:
   return success;
 }
+
 
 /* load() helpers. */
 
@@ -600,7 +601,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
- file_seek (file, ofs);
+ //file_seek (file, ofs);
+
   while (read_bytes > 0 || zero_bytes > 0)
     {
       /* Calculate how to fill this page.
@@ -612,6 +614,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Insert file in page table */
       bool file_inserted = insert_file (file, ofs, upage, page_read_bytes,
                                  page_zero_bytes, writable, FILE_BIT);
+    /*  printf("\n");
+
+      printf("load_segment read_bytes: %d\n", page_read_bytes);
+      printf("load_segment zero_bytes: %d\n", page_zero_bytes);
+      printf("load_segment offset: %d\n", ofs);
+      printf("load_segment upage: %d\n", upage);
+      printf("load_segment writable: %d\n", writable);
+      printf("\n");
+*/
+
 
 
       if (!file_inserted) {
@@ -622,7 +634,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
-      ofs += page_read_bytes;
+      ofs += PGSIZE;
       upage += PGSIZE;
   }
 
@@ -637,7 +649,7 @@ setup_stack (void **esp)
 {
    bool success = false;
 
-   success = grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
+   success = grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE, true);
    if(success){
        *esp = PHYS_BASE;
    }

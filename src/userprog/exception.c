@@ -188,6 +188,10 @@ page_fault (struct intr_frame *f)
     exit(-1);
   }*/
 
+  // writing a read only page
+  if(!not_present && write) {
+    exit(-1);
+  }
 
   bool load = false;
 
@@ -206,10 +210,6 @@ page_fault (struct intr_frame *f)
      if(pte == NULL && is_stack_access(fault_addr, f->esp)) {
         load = grow_stack(fault_addr);
     }
-  } else if(write) {
-    //TODO
-  } else if(user) {
-    //TODO
   }
 
 

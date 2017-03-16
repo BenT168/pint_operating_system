@@ -56,13 +56,14 @@ frame_evict (enum palloc_flags flags)
   , victim->upage);
 
   while(true) {
-    if(victim->writable){
-      check_pagedir_accessed(victim);
+    bool pinned = true;
+    if(!victim->writable){
+      check_pagedir_accessed(victim, pinned);
        if(check_pagedir_dirty(victim, pte)) {
           pte->loaded = false;
           list_remove(e);
           remove_pte(&victim->thread->sup_page_table, pte);
-          pagedir_clear_page(&victim->thread->pagedir, victim->upage); 
+          pagedir_clear_page(&victim->thread->pagedir, victim->upage);
           palloc_free_page(victim->upage);
           frame_free(victim);
           break;
@@ -79,9 +80,10 @@ frame_evict (enum palloc_flags flags)
 }
 
 /* TASK 3: Helper function to check if pagedir accessed */
-void check_pagedir_accessed(struct frame* frame) {
+void check_pagedir_accessed(struct frame* frame, bool pinned) {
   if(pagedir_is_accessed (frame->thread->pagedir, frame->upage)) {
     pagedir_set_accessed (frame->thread->pagedir, frame->upage, false);
+    pinned = false;
   }
 }
 
@@ -108,14 +110,15 @@ frame_alloc (void * upage, enum palloc_flags flags)
 {
   //void *kpage = palloc_get_page (PAL_USER | zero ? PAL_ZERO : 0 );
 
-  void* kpage = palloc_get_page(flags);
-
   acquire_framelock();
 
-  /* evict a frame if not enough
-  ory */
-  if (kpage == NULL){
+  void* kpage = palloc_get_page(flags);
 
+  release_framelock();
+
+  /* evict a frame if not enough memory or
+  Check that frame not mapped to kernel page */
+  if (kpage == NULL || frame_get(kpage) != NULL){
     return frame_evict(flags);
   }
   if(kpage != NULL) {
@@ -128,6 +131,7 @@ frame_alloc (void * upage, enum palloc_flags flags)
     frame->writable = false;
     frame->thread = thread_current();
 
+    acquire_framelock(); 
     /* Initialize frame's page list */
     list_push_back (&eviction_list, &frame->list_elem);
 

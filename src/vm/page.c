@@ -81,11 +81,11 @@ page_table_init(struct hash* hash) {
 void
 page_table_destroy (struct hash *hash) {
 
-  struct hash_iterator iterator;
-	hash_first(&iterator, hash);
+  struct hash_iterator iter;
+	hash_first(&iter, hash);
 
-	while (hash_next(&iterator)) {
-		struct page_table_entry *page = hash_entry(hash_cur(&iterator), struct page_table_entry, elem);
+	while (hash_next(&iter)) {
+		struct page_table_entry *page = hash_entry(hash_cur(&iter), struct page_table_entry, elem);
 		hash_delete(hash, &page->elem);
 	}
 
@@ -113,10 +113,10 @@ insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte) {
   if(pte == NULL) {
     return false;
   }
-
   bool res = false;
   acquire_pagelock();
-  if(!hash_insert(hash_table, &pte->elem)) {
+
+  if(hash_insert(hash_table, &pte->elem) == NULL) {
     res = true;
   }
   release_pagelock();
@@ -148,27 +148,36 @@ load_file(struct page_table_entry* pte) {
   struct file_d* file_d = pte->page_sourcefile;
   struct file* file = file_d->filename;
   int offset = file_d->file_offset;
+  void* upage = pte->vaddr;
+  int zero_bytes = file_d->zero_bytes;
+  int read_bytes = file_d->read_bytes;
 
-  file_seek (file, (off_t) offset);
+  file_seek(file, offset);
 
   // Allocate user page
   enum palloc_flags flag;
-  int read_bytes = file_d->read_bytes;
   if(read_bytes == 0) {
     flag = PAL_ZERO;
   } else {
     flag = PAL_USER;
   }
 
-  void* upage = pte->vaddr;
+  /*printf("\n");
+  printf("load_file read_bytes: %d\n", read_bytes);
+  printf("load_file zero_bytes: %d\n", zero_bytes);
+  printf("load_file offset: %d\n", offset);
+  printf("load_file upage: %d\n", upage);
+  printf("load_file writable: %d\n", pte->writable);
+  printf("\n");*/
+
   void* frame = frame_alloc(upage, flag);
   if(frame == NULL) {
     return false;
   }
 
   // Load page
-  int zero_bytes = file_d->zero_bytes;
   int bytes_read = file_read(file, frame, read_bytes);
+
 
   if(bytes_read != read_bytes) {
     // File not read properly, so free frame and return false
@@ -176,18 +185,20 @@ load_file(struct page_table_entry* pte) {
     return false;
   }
   // zero out memory
-  memset(frame + read_bytes, 0, zero_bytes);
+  if (zero_bytes > 0) {
+    memset(frame + read_bytes, 0, zero_bytes);
+  }
 
   // Add the page to the current process address space - add mapping
   // from vaddr to frame
   uint32_t* pd = thread_current()->pagedir;
-  bool set_page = pagedir_set_page(pd, pte->vaddr, frame, false);
+  bool set_page = pagedir_set_page(pd, pte->vaddr, frame, pte->writable);
   if(!set_page) {
     // Page not set properly, so free frame and return false
     frame_free(frame);
     return false;
-  }
 
+  }
   pte->loaded = true;
 
   return true;
@@ -262,7 +273,12 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
     }
   }
 
-  return insert_page_table_entry(&curr->sup_page_table, pte);
+  bool success = false;
+  // Check if kernel pages currently mapeed to upage
+  if(pagedir_get_page(curr->pagedir, upage) == NULL) {
+    success = insert_page_table_entry(&curr->sup_page_table, pte);
+  }
+  return success;
 }
 
 
@@ -274,6 +290,8 @@ grow_stack(void* vaddr) {
     return false;
   }
 
+  acquire_pagelock();
+
   struct page_table_entry *pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
   if (pte == NULL) {
@@ -283,7 +301,7 @@ grow_stack(void* vaddr) {
     void* round_vaddr = pg_round_down(vaddr);
     pte->vaddr = round_vaddr;
     pte->loaded = true;
-    pte->writable = true;
+    pte->writable = writable;
     pte->bit_set = SWAP_BIT;
 
     uint8_t *frame = frame_alloc(round_vaddr, PAL_USER);
@@ -304,6 +322,8 @@ grow_stack(void* vaddr) {
     if(hash_insert(&thread_current()->sup_page_table, &pte->elem) == NULL) {
       return true;
     }
+
+    release_pagelock();
 
     return false;
 }

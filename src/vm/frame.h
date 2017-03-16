@@ -29,7 +29,7 @@ struct file_d
 
 void frame_init (void);
 void* frame_evict (enum palloc_flags flags);
-void check_pagedir_accessed(struct frame* frame);
+void check_pagedir_accessed(struct frame* frame, bool pinned);
 bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte);
 void* frame_alloc(void * upage, enum palloc_flags flags);
 struct frame* frame_get(void *addr);
