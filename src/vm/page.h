@@ -94,20 +94,52 @@ struct file_d
   size_t page_zero_bytes;
 };
 
-struct hash* pt_create (void);
-bool pt_destroy (struct hash *pt);
-struct hash* pt_get_page_table (void);
-unsigned pt_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED);
-bool pt_is_lower_hash_elem (const struct hash_elem *a,
-                            const struct hash_elem *b,
-                            void *aux UNUSED);
-bool pt_init (struct hash* pt_hash);
-struct page_table_entry* pt_get_entry (struct hash *pt, unsigned page_no, pid_t pid);
-struct page_table_entry* pt_insert_entry (struct hash *pt,
-                                          struct page_table_entry *pte);
-void pt_delete_entry (struct hash *pt, struct page_table_entry *pte);
-struct page_table_entry* pt_add_page (void *upage, struct file_d file_data,
-                                      uint32_t flags_dword,
-                                      enum page_type type);
+/* Functions for page table. */
+
+/* Basic life cycle. */
+struct hash* pt_create (struct thread *t);
+bool         pt_init (struct hash *pt);
+void         pt_clear (struct thread *t);
+bool         pt_destroy (struct hash *pt);
+
+/* Page table retrieval. */
+struct hash* pt_get_page_table (struct thread *t);
+
+/* For hash function. */
+unsigned pt_hash_func (const struct hash_elem *hash_elem, void *aux);
+bool     pt_is_lower_hash_elem (const struct hash_elem *a,
+                                const struct hash_elem *b,
+                                void *aux);
+
+/* Functions for page table entries */
+
+/* Creation. */
+struct page_table_entry*
+pt_create_entry (struct thread *t,
+                 void *upage,
+                 struct file_d *file_data,
+                 uint32_t flags_dword,
+                 enum page_type type);
+
+/* Search, insertion, deletion. */
+struct page_table_entry*
+pt_get_entry (struct thread *t,
+              unsigned page_no);
+
+struct page_table_entry*
+pt_insert_entry (struct thread *t,
+                 struct page_table_entry *pte);
+
+struct page_table_entry*
+pt_replace_entry (struct thread *t,
+                  struct page_table_entry *pte);
+
+void
+pt_delete_entry (struct thread *t,
+                 struct page_table_entry *pte);
+
+/* Information. */
+size_t pt_size (struct hash *pt);
+bool pt_is_empty (struct thread *t);
 
 #endif

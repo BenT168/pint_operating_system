@@ -1,7 +1,6 @@
 #ifndef _VM_FRAME_H
 #define _VM_FRAME_H
 
-
 #include "threads/palloc.h"
 #include <hash.h>
 #include <list.h>
@@ -31,8 +30,30 @@ struct frame
 
                              Mutual exclusion is necessary to handle such
                              situations. */
-  struct list_elem elem;
+  struct hash_elem elem;
 };
+
+/* Funtions for frame table. */
+
+/* Basic life cycle. */
+struct hash* ft_create (void);
+bool         ft_init (void);
+void         ft_clear (void);
+void         ft_destroy (void);
+
+/* Frame table retrieval. */
+struct hash* ft_get_frame_table (void);
+
+/* Functions for page frames. */
+
+/* Create */
+struct frame* ft_create_frame (void *kpage);
+
+/* Search, insertion, deletion. */
+struct frame* ft_get_frame (void *kpage);
+struct frame* ft_insert_frame (struct frame *f);
+struct frame* ft_replace_frame (struct frame *f_new);
+struct frame* ft_delete_frame (struct frame *f);
 
 /* Creation and destruction of frame table. */
 struct list* ft_create (void);

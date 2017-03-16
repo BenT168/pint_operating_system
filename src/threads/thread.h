@@ -156,6 +156,14 @@ struct thread
 
 	/* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    /* TASK 3 */
+    struct hash *pt;                    /* Supplementary page table. We should
+                                           store the entire page table in the
+                                           thread struct, since it will
+                                           probably grow too large and corrupt
+                                           the stack. So we store a pointer
+                                           instead. */
   };
 
 /* TASK 2: Struct for process identification's exit status. */

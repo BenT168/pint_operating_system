@@ -11,8 +11,13 @@
 #include "vm/ptutils.h"
 
 /* We maintain a global list of frames and correspondingly, use a global
-   eviction policy. */
-static struct list *page_frames;
+   eviction policy.
+
+   We want to ensure that no more than one frame is associated with a given
+   kernel page. In order to do so, we implement the frame table as implemented
+   as a hash table, hashing on the frame number of the frame - which is equal
+   to the 20 high order bits of the frame's kernel base address. */
+static struct hash *page_frames;
 
 
 /**** SYNCHRONISATION ****/
@@ -161,7 +166,6 @@ ft_load (struct page_table_entry *pte, enum palloc_flags flags)
     pte->modified   = 0;
 
     /* Add mapping in current thread's page tables. */
-    // TODO: Wrong thread. Need to obtain page tables of faulting thread.
     uint32_t *pd = thread_current ()->pagedir;
     uintptr_t *upage = (uintptr_t) (pte->page_no << PGBITS);
     bool load_success = pagedir_set_page (pd, upage, kpage, pte->readwrite);
@@ -169,9 +173,10 @@ ft_load (struct page_table_entry *pte, enum palloc_flags flags)
     if (!load_success)
     {
       fprintf(stderr, "Memory allocation failure: cannot update process'
-                       individual page tables with new mapping.\n", );
+                       individual page tables with new mapping.\n");
       palloc_free_page (kpage);
       free (f);
+      lock_release (&pte->lock);
       return NULL;
     }
     lock_release (&pte->lock);
