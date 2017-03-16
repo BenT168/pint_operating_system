@@ -15,7 +15,7 @@
 #define FILE_BIT 1
 #define MMAP_BIT 2
 
-static struct lock page_lock;
+#define MAXI_STACK_SIZE (1 << 26)
 
 struct page_table_entry {
 
@@ -50,8 +50,8 @@ bool insert_page_table_entry(struct hash* hash_table, struct page_table_entry* p
 bool load_page(struct page_table_entry* pte);
 bool load_file(struct page_table_entry* pte);
 bool load_swap(struct page_table_entry* pte);
-bool insert_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
-bool insert_mem_map_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
+void remove_pte(struct hash* page_table, struct page_table_entry* pte);
+bool insert_file(struct file* file, off_t offset, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable, int bit_set);
 bool grow_stack(void* vaddr);
 bool check_mmap(struct page_table_entry *pte);
 void free_pte(struct page_table_entry* pte);

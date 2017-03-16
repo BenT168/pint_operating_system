@@ -174,34 +174,42 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* TASK 2 : Try to access a kernel address in user mode. */
+  /* TASK 2 : Try to access a kernel address in user mode.
 	if (user && (!is_user_vaddr(fault_addr) || !fault_addr)) {
 		exit(-1);
 	} else if (!user && is_user_vaddr(fault_addr)) {
 		exit(-1);
 	}
+*/
 
   /* TASK 3 : TO COMMENT */
 
-  lock_init (&page_lock);
+  /*if(!not_present || fault_addr == NULL || !is_user_vaddr(fault_addr)) {
+    exit(-1);
+  }*/
 
-  struct thread* curr = thread_current();
-  lock_acquire(&page_lock);
-
-  void* vaddr = pg_round_down(fault_addr);
-
-  struct page_table_entry* pte = get_page_table_entry(&curr->sup_page_table,vaddr);
 
   bool load = false;
 
-  if(pte->loaded) {
-    load = true;
-  }
+  if(not_present) {
 
-  if(pte != NULL && !pte->loaded) {
-    load = load_page(pte);
-  } else if(pte == NULL && is_stack_access(fault_addr, f->esp)) {
-      load = grow_stack(fault_addr);
+    struct thread* curr = thread_current();
+    //lock_acquire(&page_lock);
+
+    void* vaddr = pg_round_down(fault_addr);
+
+    struct page_table_entry* pte = get_page_table_entry(&curr->sup_page_table, vaddr);
+
+    if(pte != NULL) {
+      load = load_page(pte);
+    }
+     if(pte == NULL && is_stack_access(fault_addr, f->esp)) {
+        load = grow_stack(fault_addr);
+    }
+  } else if(write) {
+    //TODO
+  } else if(user) {
+    //TODO
   }
 
 
@@ -213,5 +221,5 @@ page_fault (struct intr_frame *f)
 			  user ? "user" : "kernel");
     kill (f); // kill if page is not loading
   }
-  lock_release(&page_lock);
+  //lock_release(&page_lock);
 }

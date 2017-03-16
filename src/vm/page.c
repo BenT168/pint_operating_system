@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <hash.h>
 #include "userprog/pagedir.h"
+#include "userprog/process.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
@@ -12,6 +13,7 @@
 #include "vm/swap.h"
 #include "vm/frame.h"
 
+static struct lock page_lock;
 
 /* Task 3 : Hash's helper functions to initialise */
 static unsigned page_hash_table(const struct hash_elem *h_elem, void *aux UNUSED);
@@ -71,10 +73,8 @@ page_action_func (struct hash_elem *e, void *aux UNUSED) {
 /* TASK 3: Initialise page table */
 void
 page_table_init(struct hash* hash) {
-//  acquire_pagelock();
   hash_init(hash, &page_hash_table, is_lower_hash_elem, NULL);
   lock_init (&page_lock);
-//  release_pagelock();
 }
 
 /* TASK 3: Destroy page table */
@@ -115,11 +115,11 @@ insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte) {
   }
 
   bool res = false;
-  //acquire_pagelock();
+  acquire_pagelock();
   if(!hash_insert(hash_table, &pte->elem)) {
     res = true;
   }
-  //release_pagelock();
+  release_pagelock();
 
   return res;
 }
@@ -128,6 +128,10 @@ insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte) {
 bool
 load_page(struct page_table_entry* pte) {
   bool res = false;
+  //Check if page already loaded
+  if(pte->loaded) {
+    return true;
+  }
   switch (pte->bit_set) {
     case FILE_BIT :
     case MMAP_BIT: res = load_file(pte); break;
@@ -144,6 +148,7 @@ load_file(struct page_table_entry* pte) {
   struct file_d* file_d = pte->page_sourcefile;
   struct file* file = file_d->filename;
   int offset = file_d->file_offset;
+
   file_seek (file, (off_t) offset);
 
   // Allocate user page
@@ -154,7 +159,9 @@ load_file(struct page_table_entry* pte) {
   } else {
     flag = PAL_USER;
   }
-  void* frame = palloc_get_page(flag);
+
+  void* upage = pte->vaddr;
+  void* frame = frame_alloc(upage, flag);
   if(frame == NULL) {
     return false;
   }
@@ -189,12 +196,13 @@ load_file(struct page_table_entry* pte) {
 // load swap page
 bool
 load_swap(struct page_table_entry* pte) {
-  if(! (pte->bit_set == SWAP_BIT || pte->bit_set == FILE_BIT)) {
+  if(!(pte->bit_set == SWAP_BIT || pte->bit_set == FILE_BIT)) {
     return false;
   }
 
  // Allocate user page
-  void* frame = palloc_get_page(PAL_USER);
+  void* upage = pte->vaddr;
+  void* frame = frame_alloc(upage, PAL_USER);
   if (frame == NULL) {
     return false;
   }
@@ -223,7 +231,7 @@ load_swap(struct page_table_entry* pte) {
 bool
 insert_file(struct file* file, off_t offset, uint8_t *upage,
                              uint32_t read_bytes, uint32_t zero_bytes,
-                             bool writable) {
+                             bool writable, int bit_set) {
   struct thread* curr = thread_current();
   struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
@@ -231,7 +239,7 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
     return false;
   }
 
-  pte->bit_set = FILE_BIT;
+  pte->bit_set = bit_set;
   pte->vaddr = upage;
 
   struct file_d* file_d = (struct file_d*)malloc(sizeof(struct file_d));
@@ -244,48 +252,28 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
   pte->loaded = false;
   pte->writable = writable;
 
-  return insert_page_table_entry(&curr->sup_page_table, pte);
-}
-
-
-// Inserts memory mapped file in page table
-bool
-insert_mem_map_file(struct file* file, off_t offset, uint8_t *upage,
-			     uint32_t read_bytes, uint32_t zero_bytes,
-			     bool writable) {
-  struct thread* curr = thread_current();
-  struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
-
-  if(pte == NULL) {
-    return false;
-  }
-
-    pte->bit_set = MMAP_BIT;
-    pte->vaddr = upage;
-
-    struct file_d* file_d = (struct file_d*)malloc(sizeof(struct file_d));
-    file_d->filename = file;
-    file_d->file_offset = offset;
-    file_d->read_bytes = read_bytes;
-    file_d->zero_bytes = zero_bytes;
-
-    pte->page_sourcefile = file_d;
-    pte->loaded = false;
-    pte->writable = writable;
+  // Check for memory mapped files
+  if(bit_set == MMAP_BIT) {
+    pte->writable = true;
     pte->mapid = curr->mapid;
-
     if (!check_mmap(pte)) {
       free(pte);
       return false;
     }
+  }
 
-    return insert_page_table_entry(&curr->sup_page_table, pte);
+  return insert_page_table_entry(&curr->sup_page_table, pte);
 }
+
 
 // Function for stack growth
 bool
 grow_stack(void* vaddr) {
-  struct thread* curr = thread_current();
+
+  if((size_t)(PHYS_BASE - pg_round_down(vaddr) > MAXI_STACK_SIZE)) {
+    return false;
+  }
+
   struct page_table_entry *pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
   if (pte == NULL) {
@@ -298,17 +286,17 @@ grow_stack(void* vaddr) {
     pte->writable = true;
     pte->bit_set = SWAP_BIT;
 
-    uint8_t *frame = palloc_get_page(PAL_USER);
+    uint8_t *frame = frame_alloc(round_vaddr, PAL_USER);
 
     if(frame == NULL) {
       free_pte(pte);
       return false;
     }
 
-    bool set_page = pagedir_set_page(curr->pagedir, round_vaddr, frame, pte->writable);
+    bool set_page = install_page(round_vaddr, frame, pte->writable);
 
     if(!set_page) {
-      free_pte(pte);
+      free(pte);
       frame_free(frame);
       return false;
     }
@@ -317,7 +305,8 @@ grow_stack(void* vaddr) {
       return true;
     }
 
-  }
+    return false;
+}
 
 bool
 check_mmap(struct page_table_entry *pte) {
@@ -327,7 +316,7 @@ check_mmap(struct page_table_entry *pte) {
 	struct vm_mmap *mmap = malloc(sizeof(struct vm_mmap));
 
 	if (!mmap) {
-		return false;
+	  return false;
 	}
 
 	mmap->mapid = cur->mapid;
@@ -346,5 +335,20 @@ free_pte(struct page_table_entry* pte) {
   if (pte->page_sourcefile) {
        free(pte->page_sourcefile);
   }
+}
 
+void
+remove_pte(struct hash* page_table, struct page_table_entry* pte) {
+  struct hash_iterator iter;
+  hash_first(&iter, page_table);
+
+  void* addr = pte->vaddr;
+
+  while (hash_next(&iter)) {
+    struct page_table_entry *page = hash_entry(hash_cur(&iter), struct page_table_entry, elem);
+    if(page->vaddr == addr) {
+      hash_delete(page_table, &page->elem);
+      break;
+    }
+  }
 }

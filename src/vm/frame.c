@@ -41,7 +41,7 @@ frame_init (void)
 }
 
 /* TASK 3 : Evicts a frame and replaces it with a new one */
-void
+void*
 frame_evict (enum palloc_flags flags)
 {
   //acquire_framelock();
@@ -52,52 +52,55 @@ frame_evict (enum palloc_flags flags)
 
   struct list_elem *e = list_begin (&eviction_list);
   struct frame *victim = list_entry (e, struct frame, list_elem);
-
-  while (pagedir_is_accessed (victim->thread->pagedir, victim->upage)) {
-    pagedir_set_accessed (victim->thread->pagedir, victim->upage, false);
-    e = list_next (e);
-    if (e == list_end (&eviction_list)) {
-      e = list_begin (&eviction_list);
-    }
-    victim = list_entry (e, struct frame, list_elem);
-  }
-
-
-  //release_framelock();
-
-  // Accessed and Dirty (modified) Bit
   struct page_table_entry* pte = get_page_table_entry(&victim->thread->sup_page_table
   , victim->upage);
-  struct list_elem *elem = list_begin (&eviction_list);
-  victim = list_entry (elem, struct frame, list_elem);
 
   while(true) {
-
-    if(pagedir_is_dirty(victim->thread->pagedir, victim->upage)) {
-
-      if(pte->bit_set == SWAP_BIT) {
-        struct swap_slot* ss = (struct swap_slot*)malloc(sizeof(struct swap_slot));
-        ss->swap_frame = victim;
-        ss->swap_addr = (block_sector_t) victim->upage;
-        swap_store(ss);
-      } else if(pte->bit_set == MMAP_BIT) {
-        munmap(pte->mapid);
-        //goto mmap;
-      }
-      pte->loaded = false;
-      list_remove(elem);
-      palloc_free_page(victim->upage);
-      frame_free(victim);
-      return;
+    if(victim->writable){
+      check_pagedir_accessed(victim);
+       if(check_pagedir_dirty(victim, pte)) {
+          pte->loaded = false;
+          list_remove(e);
+          remove_pte(&victim->thread->sup_page_table, pte);
+          pagedir_clear_page(&victim->thread->pagedir, victim->upage); 
+          palloc_free_page(victim->upage);
+          frame_free(victim);
+          break;
+       }
     }
-
-    e = list_next (e);
-    if (e == list_end (&eviction_list)) {
-      e = list_begin (&eviction_list);
+     e = list_next (e);
+     if (e == list_end (&eviction_list)) {
+     e = list_begin (&eviction_list);
     }
     victim = list_entry (e, struct frame, list_elem);
   }
+
+  return  palloc_get_page(flags);
 }
+
+/* TASK 3: Helper function to check if pagedir accessed */
+void check_pagedir_accessed(struct frame* frame) {
+  if(pagedir_is_accessed (frame->thread->pagedir, frame->upage)) {
+    pagedir_set_accessed (frame->thread->pagedir, frame->upage, false);
+  }
+}
+
+/* TASK 3: Helper function to check if pagedir accessed */
+bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte) {
+  if(pagedir_is_dirty(frame->thread->pagedir, frame->upage)) {
+      if(pte->bit_set == SWAP_BIT) {
+        struct swap_slot* ss = (struct swap_slot*)malloc(sizeof(struct swap_slot));
+        ss->swap_frame = frame;
+        ss->swap_addr = (block_sector_t) frame->upage;
+        swap_store(ss);
+      } else if(pte->bit_set == MMAP_BIT) {
+          munmap(pte->mapid);
+      }
+      return true;
+  }
+  return false;
+}
+
 
 /* TASK 3 : Allocates a new page, and adds it to the frame table */
 void*
@@ -107,28 +110,32 @@ frame_alloc (void * upage, enum palloc_flags flags)
 
   void* kpage = palloc_get_page(flags);
 
-  //acquire_framelock();
+  acquire_framelock();
 
-  /* evict a frame if not enough memory */
-  if (kpage == NULL) frame_evict(flags);
+  /* evict a frame if not enough
+  ory */
+  if (kpage == NULL){
 
-  if(frame_get(kpage) != NULL) {
-      return kpage;
+    return frame_evict(flags);
+  }
+  if(kpage != NULL) {
+
+    /* build up the frame */
+    struct frame *frame = (struct frame*)malloc(sizeof(struct frame));
+    frame->addr = kpage;
+    frame->upage = upage;
+    frame->frame_sourcefile = malloc(sizeof(struct file_d));
+    frame->writable = false;
+    frame->thread = thread_current();
+
+    /* Initialize frame's page list */
+    list_push_back (&eviction_list, &frame->list_elem);
+
+    release_framelock();
   }
 
-  /* build up the frame */
-  struct frame *frame = (struct frame*)malloc(sizeof(struct frame));
-  frame->addr = kpage;
-  frame->upage = upage;
-  frame->frame_sourcefile = malloc(sizeof(struct file_d));
-  frame->writable = false;
-  frame->thread = thread_current();
-
-  /* Initialize frame's page list */
-  list_push_back (&eviction_list, &frame->list_elem);
-
-  //release_framelock();
   return kpage;
+
 }
 
 
@@ -136,11 +143,11 @@ frame_alloc (void * upage, enum palloc_flags flags)
 void
 frame_free (void * addr)
 {
-  //acquire_framelock();
+  acquire_framelock();
   struct frame *frame = frame_get(addr);
   list_remove (&frame->list_elem);
   palloc_free_page(addr);
-  //release_framelock();
+  release_framelock();
   if (frame->frame_sourcefile) {
 	     free(frame->frame_sourcefile);
   }

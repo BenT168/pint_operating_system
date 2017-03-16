@@ -451,7 +451,7 @@ mapid_t mmap (int fd, void *addr) {
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* Add mmap to page table/ fail if mapping already exists */
-		if (!insert_mem_map_file(f, offs, addr, page_read_bytes, page_zero_bytes, NULL)) {
+		if (!insert_file(f, offs, addr, page_read_bytes, page_zero_bytes, NULL, MMAP_BIT)) {
 			lock_release(&mapid_lock);
 			munmap(cur->mapid);
 			cur->mapid--;

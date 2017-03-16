@@ -88,9 +88,12 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  struct thread* cur = thread_current ();
   /* TASK 3 : Initialise swap elements */
+  page_table_init(&cur->sup_page_table);
+  list_init(&cur->mmapped_files);
+  frame_init();
   swap_init();
-  lock_init (&page_lock);
 
 
   /* Initialize interrupt frame and load executable. */
@@ -449,7 +452,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment_vm (file, file_page, (void *) mem_page,
+              if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -543,7 +546,7 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    or disk read error occurs. */
 
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
+load_segment_ori (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -590,13 +593,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 
 static bool
-load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
+load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		     uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
+ file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0)
     {
       /* Calculate how to fill this page.
@@ -607,7 +611,7 @@ load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
 
       /* Insert file in page table */
       bool file_inserted = insert_file (file, ofs, upage, page_read_bytes,
-                                 page_zero_bytes, writable);
+                                 page_zero_bytes, writable, FILE_BIT);
 
 
       if (!file_inserted) {
@@ -633,6 +637,13 @@ setup_stack (void **esp)
 {
    bool success = false;
 
+   success = grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
+   if(success){
+       *esp = PHYS_BASE;
+   }
+   return success;
+
+/*
   uint8_t *kpage;
   kpage = frame_alloc (PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
   //printf("kpage: %d\n", kpage);
@@ -645,7 +656,7 @@ setup_stack (void **esp)
     }
     return success;
   }
-
+*/
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

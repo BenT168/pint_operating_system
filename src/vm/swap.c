@@ -50,9 +50,9 @@ swap_init ()
 
   swap_bitmap = bitmap_create (swap_size);
 
-  //acquire_swaplock();
+  acquire_swaplock();
 	bitmap_set_all(swap_bitmap, 0);
-	//release_swaplock();
+	release_swaplock();
 }
 
 /* TASK 3: Construct the swap slot and dereference to frame */
@@ -81,12 +81,11 @@ block_sector_t swap_get_free ()
 void
 swap_load (void *upageaddr, struct swap_slot* ss)
 {
-  //acquire_swaplock();
-  for (int i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++) {
+  acquire_swaplock();
+  for (int i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++)
     block_read (swap_space, ss->swap_addr + i, upageaddr + i * BLOCK_SECTOR_SIZE);
-  }
   bitmap_set_multiple (swap_bitmap, ss->swap_addr, NBR_BLOCKS, NULL);
-  //release_swaplock();
+  release_swaplock();
 }
 
 
@@ -94,20 +93,18 @@ swap_load (void *upageaddr, struct swap_slot* ss)
 void
 swap_store (struct swap_slot * ss)
 {
-  //acquire_swaplock();
+  acquire_swaplock();
   block_sector_t swap_addr = swap_get_free();
   for (int i = 0; i < NBR_BLOCKS; i++)
-  {
     block_write (swap_space, swap_addr + i, ss->swap_frame->upage + i *BLOCK_SECTOR_SIZE);
-  }
-  //release_swaplock();
+  release_swaplock();
 }
 
 /* TASK 3: free swap slots */
 void
 swap_free (struct swap_slot* ss)
 {
-  //acquire_swaplock();
+  acquire_swaplock();
   bitmap_set_multiple (swap_bitmap, ss->swap_addr, NBR_BLOCKS, false);
-  //release_swaplock();
+  release_swaplock();
 }

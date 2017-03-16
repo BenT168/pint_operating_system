@@ -244,11 +244,11 @@ thread_create (const char *name, int priority,
   list_push_back (&thread_current()->child_procs, &child->child_elem);
   #endif
 
-  /* TASK 3: Initialise Supplenemary page table */
+  /* TASK 3: Initialise Supplenemary page table 
   page_table_init(&t->sup_page_table);
   list_init(&t->mmapped_files);
   frame_init();
-  t->mapid = 0;
+  t->mapid = 0;*/
 
   return tid;
 }
@@ -589,6 +589,8 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->nice = NICE_DEFAULT;
   t->cpu_num = CPU_NUM_DEFAULT;
+
+  t->mapid = 0; 
 
 
 }
