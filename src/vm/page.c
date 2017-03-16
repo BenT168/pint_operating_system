@@ -99,7 +99,7 @@ get_page_table_entry(struct hash* hash_table, void* vaddr) {
 
   pte->vaddr = vaddr;
 
-  struct hash_elem* h_elem = hash_find(hash_table, &pte->elem);
+  struct hash_elem *h_elem = hash_find(hash_table,  &pte->elem);
 
   if(h_elem != NULL) {
     return hash_entry(h_elem, struct page_table_entry, elem);
@@ -114,12 +114,10 @@ insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte) {
     return false;
   }
   bool res = false;
-  acquire_pagelock();
 
   if(hash_insert(hash_table, &pte->elem) == NULL) {
     res = true;
   }
-  release_pagelock();
 
   return res;
 }
@@ -191,8 +189,7 @@ load_file(struct page_table_entry* pte) {
 
   // Add the page to the current process address space - add mapping
   // from vaddr to frame
-  uint32_t* pd = thread_current()->pagedir;
-  bool set_page = pagedir_set_page(pd, pte->vaddr, frame, pte->writable);
+  bool set_page = install_page(pte->vaddr, frame, pte->writable);
   if(!set_page) {
     // Page not set properly, so free frame and return false
     frame_free(frame);
@@ -219,19 +216,27 @@ load_swap(struct page_table_entry* pte) {
   }
   // Add the page to the current process address space - add mapping
   // from vaddr to frame
-  uint32_t* pd = thread_current()->pagedir;
-  bool set_page = pagedir_set_page(pd, pte->vaddr, frame, pte->writable);
+  bool set_page = install_page(pte->vaddr, frame, pte->writable);
+
+  struct frame *f = frame_get(frame);
+
   if(!set_page) {
     // Page not set properly, so free frame and return false
     frame_free(frame);
     return false;
   }
 
+  f->writable = true;
+
   // Swap from disk -> memory
   struct swap_slot* ss = (struct swap_slot*)malloc(sizeof(struct swap_slot));
   ss->swap_addr = pte->swap_index;
   swap_load(pte->vaddr, ss);
+  memset (f + pte->page_sourcefile->read_bytes, 0, pte->page_sourcefile->zero_bytes); // Set 0 bits at end of file if required
+  f->writable = false;
 
+  pte->phys_addr = frame;
+  pte->bit_set = FILE_BIT;
   pte->loaded = true;
 
   return true;
@@ -290,8 +295,6 @@ grow_stack(void* vaddr) {
     return false;
   }
 
-  acquire_pagelock();
-
   struct page_table_entry *pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
   if (pte == NULL) {
@@ -301,7 +304,7 @@ grow_stack(void* vaddr) {
     void* round_vaddr = pg_round_down(vaddr);
     pte->vaddr = round_vaddr;
     pte->loaded = true;
-    pte->writable = writable;
+    pte->writable = true;
     pte->bit_set = SWAP_BIT;
 
     uint8_t *frame = frame_alloc(round_vaddr, PAL_USER);
@@ -322,8 +325,6 @@ grow_stack(void* vaddr) {
     if(hash_insert(&thread_current()->sup_page_table, &pte->elem) == NULL) {
       return true;
     }
-
-    release_pagelock();
 
     return false;
 }

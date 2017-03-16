@@ -17,10 +17,13 @@
 
 // Set max stack size to 8MB
 #define MAX_STACK_SIZE 8388608
+#define USER_VADDR_BOTTOM ((void *) 0x08048000)
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
+static int user_exc_count;
 
+static bool is_pointer_valid(const uint8_t *);
 static bool is_stack_access (void *, void *);
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
@@ -33,6 +36,23 @@ is_stack_access (void *addr, void *esp)
 {
   return (addr >= esp - INSTR_SIZE) && (PHYS_BASE - pg_round_down (addr) <= MAX_STACK_SIZE);
 }
+
+/*This function checks if a pointer is valid
+ * by using the get_user function on each byte of the pointer
+ */
+static bool
+is_pointer_valid(const uint8_t * pointer) {
+
+  int result;
+  if(pointer >= PHYS_BASE || pointer == NULL || pointer < 0) {
+	  return false;
+  }
+  asm ("movl $1f, %0; movzbl %1, %0; 1:"
+	: "=&a" (result) : "m" (pointer));
+
+  return !(pointer == 0xffffffff);
+}
+
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -174,31 +194,39 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* TASK 2 : Try to access a kernel address in user mode.
+  /* TASK 2 : Try to access a kernel address in user mode. */
 	if (user && (!is_user_vaddr(fault_addr) || !fault_addr)) {
 		exit(-1);
 	} else if (!user && is_user_vaddr(fault_addr)) {
 		exit(-1);
 	}
-*/
+
 
   /* TASK 3 : TO COMMENT */
 
-  /*if(!not_present || fault_addr == NULL || !is_user_vaddr(fault_addr)) {
-    exit(-1);
-  }*/
+  if(!user) {
+  	 grow_stack(fault_addr);
+  	 user_exc_count++;
+  	 if (user_exc_count >3) {
+  		  f->eip = f->esp;
+  		  f->esp = 0xffffffff;
+  		  exit(-1);
+  		  user_exc_count = 0;
+  	 }
+  	 return;
+  }
 
-  // writing a read only page
-  if(!not_present && write) {
+  /* Checks that the fault is a valid address, otherwise exits process
+   */
+  if (!is_pointer_valid(fault_addr) || !is_user_vaddr(fault_addr)) {
     exit(-1);
   }
 
   bool load = false;
 
-  if(not_present) {
+  if(not_present && fault_addr > USER_VADDR_BOTTOM && is_user_vaddr(fault_addr)) {
 
     struct thread* curr = thread_current();
-    //lock_acquire(&page_lock);
 
     void* vaddr = pg_round_down(fault_addr);
 
@@ -206,10 +234,10 @@ page_fault (struct intr_frame *f)
 
     if(pte != NULL) {
       load = load_page(pte);
-    }
-     if(pte == NULL && is_stack_access(fault_addr, f->esp)) {
+    } else if (is_stack_access(fault_addr, f->esp)) {
         load = grow_stack(fault_addr);
     }
+    return;
   }
 
 
