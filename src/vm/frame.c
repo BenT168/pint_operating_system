@@ -126,6 +126,7 @@ ft_load (struct page_table_entry *pte, enum palloc_flags flags)
     ASSERT ((pte->file_data->page_read_bytes +
              pte->file_data->page_zero_bytes) % PGSIZE == 0);
 
+    // TODO: Lock needed for synchronisation.
     file_read_at (pte->file_data->file, kpage, PGSIZE,
                   pte->file_data->file_ofs);
 
@@ -155,13 +156,18 @@ ft_load (struct page_table_entry *pte, enum palloc_flags flags)
     pte->type = MMAP;
     /* Set frame of page table entry. */
     pte->frame = frame;
+    /* Page has just been loaded and so is not modified or referenced. */
+    pte->referenced = 0;
+    pte->modified   = 0;
 
     /* Add mapping in current thread's page tables. */
+    // TODO: Wrong thread. Need to obtain page tables of faulting thread.
     uint32_t *pd = thread_current ()->pagedir;
     uintptr_t *upage = (uintptr_t) (pte->page_no << PGBITS);
     bool load_success = pagedir_set_page (pd, upage, kpage, pte->readwrite);
 
-    if (!load_success){
+    if (!load_success)
+    {
       fprintf(stderr, "Memory allocation failure: cannot update process'
                        individual page tables with new mapping.\n", );
       palloc_free_page (kpage);

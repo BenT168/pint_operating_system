@@ -6,6 +6,8 @@
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/pte.h"
+#include "vm/page.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -153,12 +155,41 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  /* Check that fault address is valid. */
+
   /* TASK 2 : Try to access a kernel address in user mode. */
 	if (user && (!is_user_vaddr(fault_addr) || fault_addr <= 0x08048000)) {
 		exit(-1);
 	} else if (!user && is_user_vaddr(fault_addr)) {
 		exit(-1);
 	}
+
+  /* TASK 3 */
+
+  /* Obtain page table entry from fault address. */
+  unsigned page_no = ((unsigned) fault_addr) & PTE_ADDR;
+  struct hash *pt = pt_get_page_table ();
+  // TODO: How to obtain process id of process that faulted.
+  struct page_table_entry *pte = pt_get_entry (pt, page_no,
+                                               thread_current ()->pid);
+
+  ASSERT (pte->page_no == page_no);
+
+  /* If entry not found, we have a fatal error, since all the process' pages
+     should have been loaded into the supplementary page table when the
+     process was started (i.e: loaded into memory and run). This should be
+     done in 'start_process'.*/
+  if (!pte)
+  {
+    fprintf(stderr, "In Page Fault:\n
+                     No page table entry for virtual page
+                     (no offset) %u in supplementary page
+                     table.\n", page_no);
+    PANIC ("Fatal: Missing entry in supplementary page table.");
+  }
+
+  /* Fault address is valid, so load page into page tables. */
+  struct frame *frame = ft_load (pte, PAL_USER);
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

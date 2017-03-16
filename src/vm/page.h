@@ -41,10 +41,10 @@ enum page_type
 /* The page table will implemented as a hash table, using the provided
    hash table implementation. */
 
-/* Ideally, the page number would be used as an index to the page table.
-   However, since the provided hash table is implemented as a bucket of
-   values instead of a map from keys from values, we store the page
-   number within the page table entry and use this page number as
+/* Ideally, the page number and process id would be used as an index to the
+   page table. However, since the provided hash table is implemented as a
+   bucket of values instead of a map from keys from values, we store the page
+   number and process id within the page table entry and use them as a
    unique identifier of page table entries.
 
    Page table entries are hashed and stored the page table. */
@@ -69,6 +69,7 @@ struct page_table_entry
   struct file_d *file_data;  /* Pointer to file data containing
                                 actual page data. */
   pid_t pid;                 /* Id of process to which this page belongs. */
+
   struct lock lock;          /* Lock to implement mutually exclusive access to
                                 page table entry. */
   struct hash_elem elem;
@@ -95,16 +96,18 @@ struct file_d
 
 struct hash* pt_create (void);
 bool pt_destroy (struct hash *pt);
+struct hash* pt_get_page_table (void);
 unsigned pt_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED);
 bool pt_is_lower_hash_elem (const struct hash_elem *a,
                             const struct hash_elem *b,
                             void *aux UNUSED);
 bool pt_init (struct hash* pt_hash);
-struct page_table_entry* pt_get_entry (struct hash *pt, unsigned page_no);
+struct page_table_entry* pt_get_entry (struct hash *pt, unsigned page_no, pid_t pid);
 struct page_table_entry* pt_insert_entry (struct hash *pt,
                                           struct page_table_entry *pte);
 void pt_delete_entry (struct hash *pt, struct page_table_entry *pte);
-bool pt_add_page (void *upage, struct file_d file_data, uint32_t flags_dword,
-                  enum page_type type);
+struct page_table_entry* pt_add_page (void *upage, struct file_d file_data,
+                                      uint32_t flags_dword,
+                                      enum page_type type);
 
 #endif

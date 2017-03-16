@@ -16,6 +16,12 @@
 /* Global page table. */
 static struct hash *page_table;
 
+static int
+pt_create_hash_int (unsigned page_no, pid_t pid)
+{
+  return (int) (((unsigned) pid) << PGSIZE) & page_no;
+}
+
 /* Creates the page table by dynamically allocating memory for it.
    Returns true if page table is already initialised, or currently
    uninitialised and successfully initialised by the function. Returns false if
@@ -68,7 +74,7 @@ pt_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
 
   pte = hash_entry (hash_elem, struct page_table_entry, elem);
 
-  int hash = (int) pte->page_no;
+  int hash = pt_create_hash_int (pte->page_no, pte->pid);
   return hash_int (hash);
 }
 
@@ -86,8 +92,10 @@ pt_is_lower_hash_elem (const struct hash_elem *a, const struct hash_elem *b,
 
   pte_a = hash_entry(a, struct page_table_entry, elem);
   pte_b = hash_entry(b, struct page_table_entry, elem);
+  int hashint_a = pt_create_hash_int (pte_a->page_no, pte_a->pid);
+  int hashint_b = pt_create_hash_int (pte_b->page_no, pte_b->pid);
 
-  return pte_a->page_no < pte_b->page_no;
+  return hashint_a < hashint_b;
 }
 
 /* Intitialise page table.
@@ -113,6 +121,8 @@ pt_get_entry (struct hash *pt, unsigned page_no)
   }
 
   pte->page_no = page_no;
+  // Elements are hashed on page number and compared using page number, so
+  // this should be fine.
   struct hash_elem *h_elem = hash_find (pt, &pte->elem);
 
   if (!h_elem)
@@ -146,7 +156,11 @@ pt_insert_entry (struct hash *pt, struct page_table_entry *pte)
 void
 pt_delete_entry (struct hash *pt, struct page_table_entry *pte)
 {
-  
+  if (!pte)
+  {
+    hash_delete (pt, &pte->elem);
+    free (pte);
+  }
 }
 
 /* Adds an unmapped page to the page table.
@@ -155,8 +169,10 @@ pt_delete_entry (struct hash *pt, struct page_table_entry *pte)
    'flags' denots the flags of the page table entry.
    'file_data' points to the 'file_data' struct which contains the source file
    of the page; the offset at which to start reading; the number of bytes
-   actually read into the page; and the remaining zero bytes in the page. */
-bool
+   actually read into the page; and the remaining zero bytes in the page.
+
+   Returns a pointer to the page table entry. */
+struct page_table_entry*
 pt_add_page (void *upage, struct file_d *file_data, uint32_t flags_dword,
              enum page_type type)
 {
@@ -175,7 +191,5 @@ pt_add_page (void *upage, struct file_d *file_data, uint32_t flags_dword,
   struct hash *pt = pt_get_page_table ();
 
   /* Insert entry into page table */
-  if (!pt_insert_entry (pt, pte))
-    return false;
-  return true;
+  return pt_insert_entry (pt, pte);
 }
