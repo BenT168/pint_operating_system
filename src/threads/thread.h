@@ -164,6 +164,8 @@ struct thread
                                            probably grow too large and corrupt
                                            the stack. So we store a pointer
                                            instead. */
+    struct list_elem frame_elem;    /* Used to store thread pid in list of
+                                       threads mapping to a particular frame. */
   };
 
 /* TASK 2: Struct for process identification's exit status. */

@@ -1,6 +1,7 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <stddef.h>
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "threads/vaddr.h"
@@ -8,6 +9,7 @@
 #include "threads/thread.h"
 #include "threads/pte.h"
 #include "vm/page.h"
+#include "vm/frame.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -155,23 +157,9 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* Check that fault address is valid. */
-  if (!not_present)
-  {
-    fprintf(stderr, "Rights violation (Illegal memory access).\n
-                     Killing process...\n");
-    kill(f);
-    //TODO: implement copy on write instead.
-  }
-
-  /* TASK 2 : Try to access a kernel address in user mode. */
-	if (user && (!is_user_vaddr(fault_addr) || fault_addr <= 0x08048000)) {
-		exit(-1);
-	} else if (!user && is_user_vaddr(fault_addr)) {
-		exit(-1);
-	}
-
-  /* TASK 3 */
+  /* Check validity of address. */
+  if (user && (!is_user_vaddr (fault_addr)))
+    kill (f);
 
   /* Obtain page table entry from fault address. */
   unsigned page_no = ((unsigned) fault_addr) & PTE_ADDR;
@@ -182,28 +170,36 @@ page_fault (struct intr_frame *f)
      process was started in 'start_process'.*/
   if (!pte)
   {
-    fprintf(stderr, "In Page Fault:\n
-                     No page table entry for virtual page
-                     (no offset) %u in supplementary page
-                     table.\n", page_no);
+    printf("In Page Fault:\n No page table entry for virtual page (no offset) %u in supplementary page table.\n", page_no);
     PANIC ("Fatal: Missing entry in supplementary page table.");
   }
+
+  ASSERT (pte->page_no == page_no);
 
   /* Update read-write status. */
   pte->readwrite = write;
 
-  ASSERT (pte->page_no == page_no);
+  struct frame *frame;
 
-  /* Fault address is valid, so load page into page frame. */
-  struct frame *frame = ft_load (pte, PAL_USER);
+  /* Copy-on-write. */
+  if (!not_present)
+  {
+    /* Get frame from page table entry. */
+    frame = ft_get_frame (pte);
 
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+    /* Create new frame using same data. */
+    struct frame *copy_frame = ft_copy_frame (frame);
+
+    /* Have page table entry point to new frame. */
+    pte->frame = copy_frame;
+  }
+  else
+  {
+    /* Create new frame. */
+    frame = ft_create_frame (pte, PAL_USER);
+  }
+
+  /* Load frame. */
+  if (!ft_load_frame (frame))
+    PANIC ("Fatal (Page Fault Handler): Frame table load failed");
 }

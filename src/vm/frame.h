@@ -12,8 +12,11 @@ struct frame
   unsigned frame_no:20;   /* Unique identifier of page frame. This should be
                              equal to the 20 high order bits of the kernel
                              address at which the page frame begins. */
-  struct list pids;       /* Ids of processes which have a virtual page mapping
-                             to this page. */
+
+  struct list pids_entries;   /* List of page table entries mapping to this
+                                 frame and corresponding process ids. Each pid
+                                 is associated with a unique entry. */
+
   unsigned shared:1;      /* 1 if the page is shared and 0 if it is not. */
   struct lock lock;       /* Lock used to implement mutually exclusive access to
                              a page frame. This is particularly necessary for
@@ -33,11 +36,23 @@ struct frame
   struct hash_elem elem;
 };
 
+struct pid_to_entry
+{
+  pid_t pid;
+  struct page_table_entry *pte;
+  struct list_elem elem;
+}
+
 /* Funtions for frame table. */
+
+/* Hash function */
+unsigned ft_hash_func (const struct hash_elem *e, void *aux);
+bool ft_is_lower_hash_elem (const struct hash_elem *a,
+                            const struct hash_elem *b,
+                            void *aux);
 
 /* Basic life cycle. */
 struct hash* ft_create (void);
-bool         ft_init (void);
 void         ft_clear (void);
 void         ft_destroy (void);
 
@@ -47,23 +62,24 @@ struct hash* ft_get_frame_table (void);
 /* Functions for page frames. */
 
 /* Create */
-struct frame* ft_create_frame (void *kpage);
+struct frame* ft_create_frame (struct page_table_entry *pte,
+                               enum palloc_flags flags);
 
 /* Search, insertion, deletion. */
-struct frame* ft_get_frame (void *kpage);
-struct frame* ft_insert_frame (struct frame *f);
+struct frame* ft_get_frame (struct page_table_entry *pte);
+struct frame* ft_load_frame (struct frame *f);
 struct frame* ft_replace_frame (struct frame *f_new);
-struct frame* ft_delete_frame (struct frame *f);
+void          ft_delete_frame (struct frame *f);
 
-/* Creation and destruction of frame table. */
-struct list* ft_create (void);
-void ft_destroy (void);
-
-/* Loading and retrieving */
-struct frame* ft_load (struct page_table_entry *pte, enum palloc_flags flags);
-struct frame* ft_get (void *kpage);
+/* Create copy preserving only data. */
+struct frame* ft_copy_frame (struct frame *f);
 
 /* Eviction */
-void ft_evict (void);
+struct frame* ft_evict_frame (void);
+bool          ft_write_to_file (struct page_table_entry *pte);
+
+/* Information */
+size_t ft_size (struct hash *ft);
+bool ft_is_empty (struct hash *ft);
 
 #endif /* vm/frame.h */

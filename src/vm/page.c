@@ -32,20 +32,20 @@ pt_create (struct thread *t)
 {
   if (!t)
   {
-    fprintf(stderr, "Cannot create page table for null process.\n");
+    printf("Cannot create page table for null process.\n");
     return NULL;
   }
 
   if (!(t->pt))
   {
-    fprintf(stderr, "Page table has already been created.\n");
+    printf("Page table has already been created.\n");
     return pt;
   }
 
   pt = malloc (sizeof (hash));
   if (!pt)
   {
-    fprintf(stderr, "Malloc failure: Cannot create page table for
+    printf("Malloc failure: Cannot create page table for
                      process %d.\n", t->pid);
     return NULL;
   }
@@ -93,7 +93,7 @@ struct hash*
 pt_get_page_table (struct thread *t)
 {
   if (!(t->pt))
-    fprintf(stderr, "Warning: Page table uninitialised.\n");
+    printf("Warning: Page table uninitialised.\n");
   return t->pt;
 }
 
@@ -179,7 +179,7 @@ pt_get_entry (struct thread *t, unsigned page_no)
   struct hash *pt = pt_get_page_table (t);
   if (!pt)
   {
-    fprintf(stderr, "Thread %d: Cannot retrieve entry from null page table.\n",
+    printf("Thread %d: Cannot retrieve entry from null page table.\n",
             t->tid);
     return NULL;
   }
@@ -188,7 +188,7 @@ pt_get_entry (struct thread *t, unsigned page_no)
                                   malloc (sizeof (struct page_table_entry));
   if (!pte)
   {
-    fprintf(stderr, "Malloc Failure in function: pt_get_entry\n");
+    printf("Malloc Failure in function: pt_get_entry\n");
     return NULL;
   }
 
@@ -215,7 +215,7 @@ pt_insert_entry (struct thread *t, struct page_table_entry *pte)
     return NULL;
   if (!pt)
   {
-    fprintf(stderr, "Thread: %d: Cannot insert into null page table.\n",
+    printf("Thread: %d: Cannot insert into null page table.\n",
             t->tid);
     return NULL;
   }
@@ -239,7 +239,7 @@ pt_replace_entry (struct thread *t, struct page_table_entry *pte_new)
     return NULL;
   if (!pt)
   {
-    fprintf(stderr, "Thread: %d: Cannot replace entry in null page table.\n",
+    printf("Thread: %d: Cannot replace entry in null page table.\n",
             t->tid);
     return NULL;
   }
@@ -260,7 +260,7 @@ pt_delete_entry (struct thread *t, struct page_table_entry *pte)
 
   if (!pt)
   {
-    fprintf(stderr, "Thread: %d: Cannot delete entry from null page table.\n",
+    printf("Thread: %d: Cannot delete entry from null page table.\n",
             t->tid);
     return NULL;
   }
@@ -283,7 +283,7 @@ size_t pt_size (struct thread *t)
   struct hash *pt = pt_get_page_table (t);
   if (!pt)
   {
-    fprintf(stderr, "Thread %d: Warning: Retrieving size of null page
+    printf("Thread %d: Warning: Retrieving size of null page
                      table.\n", t->tid);
     return 0;
   }
@@ -297,7 +297,7 @@ bool pt_is_empty (struct thread *t)
   struct hash *pt = pt_get_page_table (t);
   if (!pt)
   {
-    fprintf(stderr, "Thread %d: Warning: Checking emptiness of null page
+    printf("Thread %d: Warning: Checking emptiness of null page
                      table.\n", t->tid);
     return false;
   }

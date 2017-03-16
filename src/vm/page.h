@@ -132,14 +132,14 @@ pt_insert_entry (struct thread *t,
 
 struct page_table_entry*
 pt_replace_entry (struct thread *t,
-                  struct page_table_entry *pte);
+                  struct page_table_entry *pte_new);
 
 void
 pt_delete_entry (struct thread *t,
                  struct page_table_entry *pte);
 
 /* Information. */
-size_t pt_size (struct hash *pt);
+size_t pt_size (struct thread *t);
 bool pt_is_empty (struct thread *t);
 
 #endif

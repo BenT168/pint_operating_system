@@ -19,8 +19,9 @@
    to the 20 high order bits of the frame's kernel base address. */
 static struct hash *page_frames;
 
-
+/*************************/
 /**** SYNCHRONISATION ****/
+/*************************/
 
 static void acquire_ft_lock (void);
 static void release_ft_lock (void);
@@ -40,34 +41,182 @@ release_ft_lock (void)
   lock_release (&ft_lock);
 }
 
-/**** MAIN FUNCTIONS ****/
+/***********************/
+/**** HASH FUNCTION ****/
+/***********************/
+
+unsigned ft_hash_func (const struct hash_elem *e, void *aux)
+{
+  struct frame *f;
+  f = hash_entry (e, struct frame, elem);
+
+  /* Hash on frame number. */
+  return hash_int ((int) f->frame_no);
+}
+
+bool ft_is_lower_hash_elem (const struct hash_elem *a,
+                            const struct hash_elem *b, void *aux)
+{
+  const struct frame *fa;
+  const struct frame *fb;
+
+  fa = hash_entry (a, struct frame, elem);
+  fb = hash_entry (b, struct frame, elem);
+
+  return hash_int ((int) fa->frame_no) < hash_int ((int) fb->frame_no);
+}
+
+/**************************/
+/**** BASIC LIFE CYCLE ****/
+/**************************/
 
 /* Creates - but does not initialise - frame table, by dynamically allocating
    memory for a list. */
-struct list*
+struct hash*
 ft_create (void)
 {
   if (page_frames)
   {
-    fprintf(stderr, "Frame table has already been created.\n");
+    printf("Frame table has already been created.\n");
     return page_frames;
   }
-  page_frames = malloc (sizeof (list));
+  page_frames = malloc (sizeof (hash));
   if (!page_frames)
   {
-    fprintf(stderr, "Frame table creation failure.\n");
+    printf("Frame table creation failure.\n");
     return NULL;
   }
-  list_init (page_frames);
+  hash_init (page_frames);
   lock_init (&ft_lock);
   return page_frames;
 }
 
 void
+ft_clear (void)
+{
+  hash_clear (page_frames, NULL);
+}
+
+void
 ft_destroy (void)
 {
-  // TODO
+  hash_destroy (page_frames, NULL);
   free(page_frames);
+}
+
+/* Retrieves frame table. */
+struct hash*
+ft_get_frame_table (void)
+{
+  return page_frames;
+}
+
+/*********************/
+/**** PAGE FRAMES ****/
+/*********************/
+
+/**** CREATION ****/
+
+/* Create a page frame (without actually mapping the entry to the frame). */
+struct frame*
+ft_create_frame (struct page_table_entry *pte, enum palloc_flags)
+{
+  struct frame *f = malloc (sizeof (struct frame));
+
+  /* Obtain kernel page. */
+  void *kpage = palloc_get_page (flags);
+
+  /* Initialise frame. */
+  f->frame_no = kpage & S_PTE_ADDR;
+  list_init (&f->pids);
+  list_push_back (&f->pids, &thread_current()->frame_elem);
+  f->shared = 0;
+  lock_init (&f->lock);
+
+  /* Insert into frame table. */
+  acquire_ft_lock ();
+  hash_insert (page_frames, &f->elem);
+  release_ft_lock ();
+
+  return f;
+}
+
+/**** SEARCH, LOADING, DELETION ****/
+
+/* Returns frame associated with page table entry 'pte'. NULL if no frame
+   exists. We also check that if a frame exists, it is in the frame table. */
+struct frame*
+ft_get_frame (struct page_table_entry *pte)
+{
+  if (pte->frame)
+  {
+    struct hash_elem *h_elem = hash_find (page_frames, &pte->frame->elem);
+    ASSERT (hash_find (page_frames, h_elem) != NULL);
+  }
+  return pte->frame;
+}
+
+struct frame*
+ft_load_frame (struct frame *f)
+{
+
+}
+
+/**** DELETION ****/
+
+/* Deletes frame from frame table. */
+void
+ft_delete_frame (struct frame *f)
+{
+  if (!f)
+    return;
+
+  struct hash_elem *h_elem = hash_find (page_frames, &f->elem);
+
+  if (!h_elem)
+  {
+    printf("Attempt to delete nonexistent frame.\n");
+    return;
+  }
+
+  /* Obtain list of threads with virtual page mappings to this frame and clear
+     the mappings. */
+  struct list_elem *temp;
+  for (temp = list_begin (&f->pids_entries);
+       temp != list_end (&f->pids_entries); temp = list_next (temp))
+  {
+    /* Get process id - page table entry mapping. */
+    struct pid_to_entry *pid_e = list_entry (temp, struct pid_to_entry, elem);
+
+    /* Get thread from process id. */
+    struct thread *t = get_tid_thread ((tid_t) pid_e->pid);
+
+    /* Write page to file system. */
+    ft_write_to_file (pid_e->pte);
+
+    /* Update supplementary page table entry. */
+    lock_acquire (&pid_e->pte->lock);
+
+    pid_e->pte->present = 0;
+    pid_e->pte->frame   = NULL;
+    pid_e->pte->type    = DISK;
+
+    /* Get process physical page tables. */
+    uint32_t *pd = t->pagedir;
+
+    /* Clear physical frame. */
+    uintptr_t *upage = (uintptr_t) (pid_e->pte->page_no << PGBITS);
+    pagedir_clear_page (pd, upage);
+
+    lock_release (&pid_e->pte->lock);
+  }
+  /* Remove frame from frame table. */
+  acquire_ft_lock ();
+  hash_delete (page_frames, h_elem);
+  release_ft_lock ();
+
+  /* Free memory. */
+  free (f);
 }
 
 /* Loads virtual page of page table entry, 'pte', into page frame. 'flags'
@@ -86,13 +235,16 @@ ft_destroy (void)
    page frame, we obtain access to additional information within the frame
    struct. */
 struct frame*
-ft_load (struct page_table_entry *pte, enum palloc_flags flags)
+ft_load_frame (struct page_table_entry *pte, enum palloc_flags flags)
 {
+  struct frame *f;
+
   if (!pte)
   {
-    fprintf(stderr, "Attempt to load null page table entry.\n");
+    printf("Attempt to load null page table entry.\n");
     return NULL;
   }
+  if (pte->frame)
     /* Entry is already mapped, so return the corresponding page frame. */
     return pte->frame;
   }
@@ -100,12 +252,10 @@ ft_load (struct page_table_entry *pte, enum palloc_flags flags)
   {
     /* Obtain kernel page. */
     void *kpage = palloc_get_page (flags);
-    if (!kpage)
+    while (!kpage)
     {
-      fprintf(stderr, "Frame memory allocation error: could not obtain kernel
-                       page.\n");
-      //TODO: Frame eviction instead
-      return NULL;
+      f = ft_evict_frame ();
+      kpage = palloc_get_page (flags);
     }
 
     /* This is a key insight.
@@ -120,10 +270,10 @@ ft_load (struct page_table_entry *pte, enum palloc_flags flags)
        In order to avoid "ghost franes", we make sure that this function,
        'ft_load', presents the only entry point for the creation and
        initialisation of page frames. */
-    struct frame *f = malloc (sizeof (struct frame));
+    f = malloc (sizeof (struct frame));
     if (!f)
     {
-      fprintf(stderr, "Frame initialisation failure: malloc failure.\n");
+      printf("Frame initialisation failure: malloc failure.\n");
       return NULL;
     }
 
@@ -172,7 +322,7 @@ ft_load (struct page_table_entry *pte, enum palloc_flags flags)
 
     if (!load_success)
     {
-      fprintf(stderr, "Memory allocation failure: cannot update process'
+      printf("Memory allocation failure: cannot update process'
                        individual page tables with new mapping.\n");
       palloc_free_page (kpage);
       free (f);
@@ -199,7 +349,7 @@ ft_get (void *kpage)
     if (f->frame_no == frame_no)
       return f;
   }
-  fprintf(stderr, "Frame with kernel address: %p not found.\n", kpage);
+  printf("Frame with kernel address: %p not found.\n", kpage);
   return NULL;
 }
 
