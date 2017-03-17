@@ -204,24 +204,6 @@ page_fault (struct intr_frame *f)
 
   /* TASK 3 : TO COMMENT */
 
-  if(!user) {
-  	 grow_stack(fault_addr);
-  	 user_exc_count++;
-  	 if (user_exc_count >3) {
-  		  f->eip = f->esp;
-  		  f->esp = 0xffffffff;
-  		  exit(-1);
-  		  user_exc_count = 0;
-  	 }
-  	 return;
-  }
-
-  /* Checks that the fault is a valid address, otherwise exits process
-   */
-  if (!is_pointer_valid(fault_addr) || !is_user_vaddr(fault_addr)) {
-    exit(-1);
-  }
-
   bool load = false;
 
   if(not_present && fault_addr > USER_VADDR_BOTTOM && is_user_vaddr(fault_addr)) {

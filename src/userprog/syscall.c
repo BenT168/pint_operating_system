@@ -132,6 +132,9 @@ halt (void)
 void
 exit (int status)
 {
+  if (filelock.holder != NULL) {
+    release_filelock();
+  }
   struct thread *cur = thread_current ();
 
   /* Send the information about the child's exit status to the parent (if
@@ -143,18 +146,12 @@ exit (int status)
     list_push_back(&cur->parent->pid_to_exit_status, &pid_exit_status->elem);
   }
   cur->exit_status = status;
-  acquire_filelock();
 
   char *save_ptr;
   char *proper_thread_name = (char *) strtok_r (cur->name, " ", &save_ptr);
 
   printf ("%s: exit(%d)\n", proper_thread_name, status);
 
-  /* TASK 2: Allow the file to be written and closed if file exists  */
-  if (cur->file) {
-    file_allow_write(cur->file);
-    file_close (cur->file);
-  }
 
   lock_acquire(&mapid_lock);
   struct list *mmaps = &cur->mmapped_files;
@@ -162,15 +159,11 @@ exit (int status)
 
   while (e != list_end(mmaps)) {
     struct vm_mmap *mmap = list_entry (e, struct vm_mmap, list_elem);
-
-      struct list_elem *next = list_next(e);
-
-      delete_mmap_entry(mmap);
-
-      e = next;
+    struct list_elem *next = list_next(e);
+    delete_mmap_entry(mmap);
+    e = next;
   }
   lock_release(&mapid_lock);
-  release_filelock();
 
   thread_exit ();
 }
@@ -218,9 +211,7 @@ bool
 create (const char *file, unsigned initial_size)
 {
   check_memory_access (file);
-  acquire_filelock ();
   bool success = filesys_create (file, initial_size);
-  release_filelock ();
   return success;
 }
 
@@ -474,7 +465,6 @@ mapid_t mmap (int fd, void *addr) {
 
 /* TASK 3 : Unmaps a file located at the start of a virtual address space. */
 void munmap (mapid_t mapping) {
-	lock_acquire(&mapid_lock);
 
 	struct thread *curr = thread_current();
 	struct list *mmaps = &curr->mmapped_files;
@@ -494,7 +484,6 @@ void munmap (mapid_t mapping) {
 		e = next;
 	}
 
-	lock_release(&mapid_lock);
 }
 
 void delete_mmap_entry(struct vm_mmap *mmap) {

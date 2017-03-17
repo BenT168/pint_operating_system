@@ -67,7 +67,6 @@ frame_evict (enum palloc_flags flags)
         list_remove(e);
         remove_pte(&victim->thread->sup_page_table, pte);
         pagedir_clear_page(victim->thread->pagedir, victim->upage);
-        palloc_free_page(victim->upage);
         frame_free(victim);
         break;
     }
@@ -101,19 +100,14 @@ bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte) {
 void*
 frame_alloc (void * upage, enum palloc_flags flags)
 {
-  //void *kpage = palloc_get_page (PAL_USER | zero ? PAL_ZERO : 0 );
-
-  acquire_framelock();
-
   void* kpage = palloc_get_page(flags);
-
-  release_framelock();
 
   /* evict a frame if not enough memory or
   Check that frame not mapped to kernel page */
   if (kpage == NULL || frame_get(kpage) != NULL){
     return frame_evict(flags);
   }
+
   if(kpage != NULL) {
 
     /* build up the frame */
@@ -124,12 +118,13 @@ frame_alloc (void * upage, enum palloc_flags flags)
     frame->writable = false;
     frame->thread = thread_current();
 
-    acquire_framelock();
     /* Initialize frame's page list */
+    acquire_framelock();
     list_push_back (&eviction_list, &frame->list_elem);
-
     release_framelock();
   }
+
+
 
   return kpage;
 
@@ -142,9 +137,9 @@ frame_free (void * addr)
 {
   acquire_framelock();
   struct frame *frame = frame_get(addr);
+  release_framelock();
   list_remove (&frame->list_elem);
   palloc_free_page(addr);
-  release_framelock();
   if (frame->frame_sourcefile) {
 	     free(frame->frame_sourcefile);
   }
