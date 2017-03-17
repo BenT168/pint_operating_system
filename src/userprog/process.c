@@ -18,7 +18,7 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "vm/page.h"
+#include "vm/frame.h"
 
 #define MAX_ARGS 50
 
