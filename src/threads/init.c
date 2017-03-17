@@ -116,7 +116,7 @@ main (void)
   syscall_init ();
 #endif
 
-  /* Initialise our frame table */
+  /* TASK 3 : Initialise our frame table */
   frame_init();
 
   /* Start thread scheduler and enable interrupts. */
@@ -132,7 +132,7 @@ main (void)
 #endif
 
   printf ("Boot complete.\n");
-  
+
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 

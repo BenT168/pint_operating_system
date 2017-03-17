@@ -8,14 +8,14 @@
 #include <debug.h>
 #include <stdio.h>
 
-#define PGSIZE 4096
-#define NBR_BLOCKS (PGSIZE / BLOCK_SECTOR_SIZE)
+#define PGSIZE 4096                                 /* The size of a page. */
+#define NBR_BLOCKS (PGSIZE / BLOCK_SECTOR_SIZE)     /* The number of sectors in a page. */
 
-static struct block *swap_space;
-static struct lock swap_lock;
-static struct bitmap * swap_bitmap;
+static struct block *swap_space;                    /* Block storing swapped table */
+static struct lock swap_lock;                       /* Global lock to stop concurrent access of the swap table. */
+static struct bitmap * swap_bitmap;                 /* The Swap Table Bitmap */
 
-unsigned swap_size;
+unsigned swap_size;                                  /* Size of the Swap Block  */
 
 static void acquire_swaplock (void);
 static void release_swaplock (void);

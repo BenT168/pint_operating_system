@@ -41,10 +41,7 @@ release_pagelock (void)
    addresses should be unique. */
 static unsigned
 page_hash_table(const struct hash_elem *h_elem, void *aux UNUSED) {
-  struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
-
-  pte = hash_entry(h_elem, struct page_table_entry, elem);
-
+  struct page_table_entry* pte = hash_entry(h_elem, struct page_table_entry, elem);
   int hash = (int) pte->vaddr;
   return hash_int(hash);
 }
@@ -73,22 +70,16 @@ page_action_func (struct hash_elem *e, void *aux UNUSED) {
 /* TASK 3: Initialise page table */
 void
 page_table_init(struct hash* hash) {
-  hash_init(hash, &page_hash_table, is_lower_hash_elem, NULL);
+  hash_init(hash, page_hash_table, is_lower_hash_elem, NULL);
   lock_init (&page_lock);
 }
 
 /* TASK 3: Destroy page table */
 void
 page_table_destroy (struct hash *hash) {
-
-  struct hash_iterator iter;
-	hash_first(&iter, hash);
-
-	while (hash_next(&iter)) {
-		struct page_table_entry *page = hash_entry(hash_cur(&iter), struct page_table_entry, elem);
-		hash_delete(hash, &page->elem);
-	}
-
+  if(hash == NULL) {
+    return;
+  }
 	hash_destroy(hash, page_action_func);
 }
 
@@ -175,7 +166,6 @@ load_file(struct page_table_entry* pte) {
 
   // Load page
   int bytes_read = file_read(file, frame, read_bytes);
-
 
   if(bytes_read != read_bytes) {
     // File not read properly, so free frame and return false

@@ -19,19 +19,18 @@
 
 struct page_table_entry {
 
-  int bit_set;
+  int bit_set;                         /* Used to store the page's current status. */
   int swap_index;
   mapid_t mapid;
-
   void* phys_addr;                     /* page's physical memory address */
   void *vaddr;                         /* page's user virtual memory address */
   struct file_d *page_sourcefile;      /* info stored if page table is memory mapped
                                           file */
   bool writable;                       /* boolean checking whether the page
                                           table is writable */
-  bool loaded;
-
-  struct hash_elem elem;
+  bool loaded;                         /* boolean checking whether the page
+                                          table is loadable */
+  struct hash_elem elem;               /* Used to store the pte in the page table. */
 };
 
 /* TASK 3: Struct for virtual memory's mapped info. */
@@ -39,7 +38,7 @@ struct vm_mmap
   {
     mapid_t mapid;                 /* Unique memory mapped identification */
     struct page_table_entry *pte; /* Pointer to the executing sup page table */
-    struct list_elem list_elem;
+    struct list_elem list_elem;   /* Used to store the memory map files  */
   };
 
 void page_table_init(struct hash* page_table_hash);

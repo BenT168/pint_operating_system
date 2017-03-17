@@ -16,7 +16,7 @@ struct frame
                                           file */
   bool writable;                       /* boolean checking whether the frame
                                           table is writable */
-  struct list_elem list_elem;
+  struct list_elem list_elem;          /* Used to store the frame in the page table. */
 };
 
 struct file_d
@@ -29,7 +29,6 @@ struct file_d
 
 void frame_init (void);
 void* frame_evict (enum palloc_flags flags);
-void check_pagedir_accessed(struct frame* frame, bool pinned);
 bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte);
 void* frame_alloc(void * upage, enum palloc_flags flags);
 struct frame* frame_get(void *addr);

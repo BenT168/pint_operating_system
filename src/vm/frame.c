@@ -44,47 +44,39 @@ frame_init (void)
 void*
 frame_evict (enum palloc_flags flags)
 {
-  //acquire_framelock();
-
-  if (list_empty (&eviction_list)) {
-    return;
-  }
-
   struct list_elem *e = list_begin (&eviction_list);
   struct frame *victim = list_entry (e, struct frame, list_elem);
   struct page_table_entry* pte = get_page_table_entry(&victim->thread->sup_page_table
   , victim->upage);
 
   while(true) {
-    bool pinned = true;
+    bool accessable = true;
     if(!victim->writable){
-      if(pagedir_is_accessed (victim->thread->pagedir, victim->upage)) {
-        pagedir_set_accessed (victim->thread->pagedir, victim->upage, false);
-        pinned = false;
-      }
-      if(pinned) {
-        if(pte->bit_set == MMAP_BIT) {
+        if(pagedir_is_accessed (victim->thread->pagedir, victim->upage)) {
+            pagedir_set_accessed (victim->thread->pagedir, victim->upage, false);
+            accessable = false;
+        }
+    }
+    if(accessable && pte->bit_set == MMAP_BIT ) {
             munmap(pte->mapid);
             goto mmap;
-        }
-      }
-       if(check_pagedir_dirty(victim, pte)) {
-          pte->loaded = false;
-          list_remove(e);
-          remove_pte(&victim->thread->sup_page_table, pte);
-          pagedir_clear_page(victim->thread->pagedir, victim->upage);
-          palloc_free_page(victim->upage);
-          frame_free(victim);
-          break;
-       }
     }
-     e = list_next (e);
-     if (e == list_end (&eviction_list)) {
-     e = list_begin (&eviction_list);
+
+    if(check_pagedir_dirty(victim, pte)) {
+        pte->loaded = false;
+        list_remove(e);
+        remove_pte(&victim->thread->sup_page_table, pte);
+        pagedir_clear_page(victim->thread->pagedir, victim->upage);
+        palloc_free_page(victim->upage);
+        frame_free(victim);
+        break;
+    }
+    e = list_next (e);
+    if (e == list_end (&eviction_list)) {
+      e = list_begin (&eviction_list);
     }
     victim = list_entry (e, struct frame, list_elem);
   }
-
   mmap:
   return  palloc_get_page(flags);
 }

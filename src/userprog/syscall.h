@@ -27,6 +27,6 @@ void close (int fd);
 /* TASK 3 */
 mapid_t mmap(int fd, void* addr);
 void munmap(mapid_t mapping);
-void remove_page_mmap(struct vm_mmap *mmap);
+void delete_mmap_entry(struct vm_mmap *mmap);
 
 #endif /* userprog/syscall.h */
