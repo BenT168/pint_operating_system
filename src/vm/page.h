@@ -8,11 +8,9 @@
 #include "filesys/file.h"
 #include "filesys/off_t.h"
 #include "threads/palloc.h"
-
-// Bit set to know what we are dealing with
-#define SWAP_BIT 0
-#define FILE_BIT 1
-#define MMAP_BIT 2
+#include "threads/thread.h"
+#include "threads/synch.h"
+#include "vm/frame.h"
 
 /* Every page table entry has a pointer pointing to the file that the contains
    the data that goes into the page. At any given point, the page's data may be
@@ -73,6 +71,7 @@ struct page_table_entry
   struct lock lock;          /* Lock to implement mutually exclusive access to
                                 page table entry. */
   struct hash_elem elem;
+  struct list_elem frame_elem;
 };
 
 /* @DEPRECATED */

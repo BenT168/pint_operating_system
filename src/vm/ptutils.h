@@ -23,6 +23,5 @@
 #define PGMASK  BITMASK(PGSHIFT, PGBITS)   /* Page offset bits (0:12). */
 #define MAX_PTE_FLAGS 4
 
-uint32_t convert_flags (pte_flags flags[], size_t arr_len);
-pte_flags[]* extract_flags (uint32_t flags_dword);
 int hamming_weight (uint32_t i);
+#endif

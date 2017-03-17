@@ -8,8 +8,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/pte.h"
-#include "vm/page.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -200,6 +200,6 @@ page_fault (struct intr_frame *f)
   }
 
   /* Load frame. */
-  if (!ft_load_frame (frame))
+  if (!ft_load_frame (pte, frame))
     PANIC ("Fatal (Page Fault Handler): Frame table load failed");
 }

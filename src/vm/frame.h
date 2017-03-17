@@ -1,10 +1,11 @@
-#ifndef _VM_FRAME_H
-#define _VM_FRAME_H
+#ifndef VM_FRAME_H
+#define VM_FRAME_H
 
 #include "threads/palloc.h"
 #include <hash.h>
 #include <list.h>
 #include <stdbool.h>
+#include "vm/page.h"
 
 /* Page frame */
 struct frame
@@ -13,9 +14,8 @@ struct frame
                              equal to the 20 high order bits of the kernel
                              address at which the page frame begins. */
 
-  struct list pids_entries;   /* List of page table entries mapping to this
-                                 frame and corresponding process ids. Each pid
-                                 is associated with a unique entry. */
+  struct list entries;    /* List of page table entries mapping to this
+                             frame. */
 
   unsigned shared:1;      /* 1 if the page is shared and 0 if it is not. */
   struct lock lock;       /* Lock used to implement mutually exclusive access to
@@ -35,13 +35,6 @@ struct frame
                              situations. */
   struct hash_elem elem;
 };
-
-struct pid_to_entry
-{
-  pid_t pid;
-  struct page_table_entry *pte;
-  struct list_elem elem;
-}
 
 /* Funtions for frame table. */
 
@@ -65,9 +58,9 @@ struct hash* ft_get_frame_table (void);
 struct frame* ft_create_frame (struct page_table_entry *pte,
                                enum palloc_flags flags);
 
-/* Search, insertion, deletion. */
+/* Search, loading, deletion. */
 struct frame* ft_get_frame (struct page_table_entry *pte);
-struct frame* ft_load_frame (struct frame *f);
+struct frame* ft_load_frame (struct page_table_entry *pte, struct frame *f);
 struct frame* ft_replace_frame (struct frame *f_new);
 void          ft_delete_frame (struct frame *f);
 

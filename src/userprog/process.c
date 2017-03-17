@@ -101,6 +101,10 @@ start_process (void *file_name_)
   if (size == -1)
     thread_exit ();
 
+  /* Create supplementary page table. */
+  if (!pt_create (thread_current ()))
+    PANIC ("Fatal: Failed to create supplementary page table.");
+
   file_name = *args;
   strlcpy(thread_current()->name, file_name, 15);
   success = load (file_name, &if_.eip, &if_.esp);
@@ -458,7 +462,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
    /* TASK 2: prevent writes to an executable read-only file */
   t->file = file;
   file_deny_write (file);
-  goto success_done;
+  //goto success_done;
 
  done:
   /* We arrive here whether the load is successful or not. */
@@ -573,6 +577,64 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       upage += PGSIZE;
     }
   return true;
+}
+
+/* Loads supplementary page table with entries and corresponding file data. */
+static bool
+load_sup_page_table (struct file *file, off_t ofs, uint8_t *upage,
+                     uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+{
+  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT (pg_ofs (upage) == 0);
+  ASSERT (ofs % PGSIZE == 0);
+
+  file_seek (file, ofs);
+
+  while (read_bytes > 0 || zero_bytes > 0)
+    {
+      /* Create and initialise 'file_d' struct. */
+      struct file_d *file_data = malloc (sizeof (struct file_d));
+      file_data->file            = file;
+      file_data->file_ofs        = ofs;
+      file_data->page_read_bytes = read_bytes;
+      file_data->page_zero_bytes = zero_bytes;
+
+      /* Create supplementary page table entry. */
+
+      // We implement lazy loading
+      // (demand paging) and avoid loading a page into memory immediately.
+      // That should be performed explicitly by the page fault handler (in
+      // the funtion 'page_fault').
+
+      // Create flags
+      uint32_t p = ~S_PTE_P;  // Not present
+      uint32_t w = writable ? S_PTE_W : ~S_PTE_W;
+      uint32_t r = ~S_PTE_R;  // Not referenced
+      uint32_t m = ~S_PTE_M;  // Not modified
+      uint32_t flags_dword = p & w & r & m;
+
+      struct page_table_entry *spte;
+      spte = pt_create_entry (thread_current (), upage, file_data,
+                              flags_dword, DISK);
+      if (!pte)
+        PANIC ("Fatal: Failed to create entry for supplementary page table");
+
+      /* Insert entry into process supplementary page table. */
+      if(!pt_insert_entry (thread_current (), spte))
+        PANIC ("Fatal: Failed to insert entry into supplementary page table");
+
+      /* Calculate how to fill this page.
+         We will read PAGE_READ_BYTES bytes from FILE
+         and zero the final PAGE_ZERO_BYTES bytes. */
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+      /* Advance. */
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+      }
+    return true;
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of

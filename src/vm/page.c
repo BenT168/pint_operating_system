@@ -1,4 +1,3 @@
-#include "vm/page.h"
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -11,12 +10,13 @@
 #include "filesys/file.h"
 #include "vm/swap.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #include "vm/ptutils.h"
 
 static int
 pt_create_hash_int (unsigned page_no, pid_t pid)
 {
-  return (int) (((unsigned) pid) << PGSIZE) & page_no;
+  return (int) (page_no * page_no + page_no + (int) pid);
 }
 
 /******************************/
@@ -36,20 +36,19 @@ pt_create (struct thread *t)
     return NULL;
   }
 
-  if (!(t->pt))
+  if (t->pt)
   {
     printf("Page table has already been created.\n");
-    return pt;
+    return t->pt;
   }
 
-  pt = malloc (sizeof (hash));
+  struct hash *pt = malloc (sizeof (struct hash));
   if (!pt)
   {
-    printf("Malloc failure: Cannot create page table for
-                     process %d.\n", t->pid);
+    printf("Malloc failure: Cannot create page table for process %d.\n", t->pid);
     return NULL;
   }
-
+  t->pt = pt;
   return pt;
 }
 
@@ -70,7 +69,7 @@ pt_clear (struct thread *t)
 {
   if (!(t->pt))
     return;
-  hash_clear (&t->pt, NULL);
+  hash_clear (t->pt, NULL);
 }
 
 /* Destroys page table. Returns true if the function executes with no fatal
@@ -153,7 +152,7 @@ struct page_table_entry*
 pt_create_entry (struct thread *t, void *upage, struct file_d *file_data,
                  uint32_t flags_dword, enum page_type type)
 {
-  struct page_table_entry *pte = malloc (sizeof (page_table_entry));
+  struct page_table_entry *pte = malloc (sizeof (struct page_table_entry));
 
   /* Initialise page table entry */
   pte->pid        = t->pid;
@@ -199,7 +198,7 @@ pt_get_entry (struct thread *t, unsigned page_no)
 
   if (!h_elem)
   {
-    return hash_entry (h_elem, struct page_table_entry, &pte->elem);
+    return hash_entry (h_elem, struct page_table_entry, elem);
   }
   free (pte);
   return NULL;
@@ -223,7 +222,7 @@ pt_insert_entry (struct thread *t, struct page_table_entry *pte)
 
   if (!h_elem)
     return pte;
-  return hash_entry (h_elem, struct page_table_entry, &pte->elem);
+  return hash_entry (h_elem, struct page_table_entry, elem);
 }
 
 /* Inserts 'pte_new' into the supplementary page table of thread 't' and
@@ -249,7 +248,7 @@ pt_replace_entry (struct thread *t, struct page_table_entry *pte_new)
   if (!old)
     hash_insert (pt, &pte_new->elem);
 
-  return old;
+  return old ? hash_entry (old, struct page_table_entry, elem) : NULL;
 }
 
 /* Deletes the entry 'pte' from the supplementary page table of thread 't'. */
@@ -259,11 +258,8 @@ pt_delete_entry (struct thread *t, struct page_table_entry *pte)
   struct hash *pt = pt_get_page_table (t);
 
   if (!pt)
-  {
     printf("Thread: %d: Cannot delete entry from null page table.\n",
             t->tid);
-    return NULL;
-  }
 
   if (!pte)
   {
@@ -283,8 +279,7 @@ size_t pt_size (struct thread *t)
   struct hash *pt = pt_get_page_table (t);
   if (!pt)
   {
-    printf("Thread %d: Warning: Retrieving size of null page
-                     table.\n", t->tid);
+    printf("Thread %d: Warning: Retrieving size of null page table.\n", t->tid);
     return 0;
   }
   return hash_size (pt);
@@ -297,8 +292,7 @@ bool pt_is_empty (struct thread *t)
   struct hash *pt = pt_get_page_table (t);
   if (!pt)
   {
-    printf("Thread %d: Warning: Checking emptiness of null page
-                     table.\n", t->tid);
+    printf("Thread %d: Warning: Checking emptiness of null page table.\n", t->tid);
     return false;
   }
   return hash_size (pt) == 0;
