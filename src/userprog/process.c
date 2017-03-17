@@ -89,10 +89,11 @@ start_process (void *file_name_)
   bool success;
 
   struct thread* cur = thread_current ();
+
   /* TASK 3 : Initialise swap elements */
   page_table_init(&cur->sup_page_table);
   list_init(&cur->mmapped_files);
-  frame_init();
+  thread_current()->mapid = 0;
   swap_init();
 
 
@@ -241,10 +242,11 @@ process_exit (void)
   }
 
   /* TASK 2: Allow the file to be written and closed if file exists  */
-  if (cur->file) {
+  /*if (cur->file) {
     file_allow_write(cur->file);
     file_close (cur->file);
   }
+  */
 
   /* TASK 2: unblock parent thread */
   sema_up (&cur->alive_sema);
@@ -550,7 +552,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
- //file_seek (file, ofs);
+  file_seek (file, ofs);
 
   while (read_bytes > 0 || zero_bytes > 0)
     {
@@ -583,7 +585,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
-      ofs += PGSIZE;
+      ofs += page_read_bytes;
       upage += PGSIZE;
   }
 

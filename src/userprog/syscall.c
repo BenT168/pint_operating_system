@@ -40,6 +40,7 @@ static syscall_dispatcher syscall_map[MAX_NUM_SYSCALLS];
 
 /* TASK 2: File system lock, ensuring access to only one file at a time */
 static struct lock filelock;
+static struct lock file_add_lock;
 static struct lock mapid_lock;
 
 /* TASK 2: Checks that the pointer is legal:
@@ -95,7 +96,8 @@ syscall_init (void)
 
   /* File system code is regarded as a critical section. */
   lock_init (&filelock);
-  lock_init(&mapid_lock);
+  lock_init(&file_add_lock);
+  lock_init (&mapid_lock);
 }
 
 /* TASK 2: This function parses the input system call code and redirects
@@ -152,6 +154,12 @@ exit (int status)
   char *proper_thread_name = (char *) strtok_r (cur->name, " ", &save_ptr);
 
   printf ("%s: exit(%d)\n", proper_thread_name, status);
+
+  /* TASK 2: Allow the file to be written and closed if file exists  */
+  if (cur->file) {
+    file_allow_write(cur->file);
+    file_close (cur->file);
+  }
 
   lock_acquire(&mapid_lock);
   struct list *mmaps = &cur->mmapped_files;
@@ -465,12 +473,12 @@ mapid_t mmap (int fd, void *addr) {
 	}
 
   //Insert map in mapping file
-  struct vm_mmap* map = (struct vm_mmap*)malloc(sizeof(struct vm_mmap));
+  /*struct vm_mmap* map = (struct vm_mmap*)malloc(sizeof(struct vm_mmap));
   map->mapid = cur->mapid;
   map->pte = get_page_table_entry(&cur->sup_page_table, addr);
 
   list_push_back(&cur->mmapped_files, &map->list_elem);
-
+  */
 	lock_release(&mapid_lock);
 
 	return cur->mapid;

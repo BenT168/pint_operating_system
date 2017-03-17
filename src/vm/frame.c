@@ -58,12 +58,21 @@ frame_evict (enum palloc_flags flags)
   while(true) {
     bool pinned = true;
     if(!victim->writable){
-      check_pagedir_accessed(victim, pinned);
+      if(pagedir_is_accessed (victim->thread->pagedir, victim->upage)) {
+        pagedir_set_accessed (victim->thread->pagedir, victim->upage, false);
+        pinned = false;
+      }
+      if(pinned) {
+        if(pte->bit_set == MMAP_BIT) {
+            munmap(pte->mapid);
+            goto mmap;
+        }
+      }
        if(check_pagedir_dirty(victim, pte)) {
           pte->loaded = false;
           list_remove(e);
           remove_pte(&victim->thread->sup_page_table, pte);
-          pagedir_clear_page(&victim->thread->pagedir, victim->upage);
+          pagedir_clear_page(victim->thread->pagedir, victim->upage);
           palloc_free_page(victim->upage);
           frame_free(victim);
           break;
@@ -76,16 +85,10 @@ frame_evict (enum palloc_flags flags)
     victim = list_entry (e, struct frame, list_elem);
   }
 
+  mmap:
   return  palloc_get_page(flags);
 }
 
-/* TASK 3: Helper function to check if pagedir accessed */
-void check_pagedir_accessed(struct frame* frame, bool pinned) {
-  if(pagedir_is_accessed (frame->thread->pagedir, frame->upage)) {
-    pagedir_set_accessed (frame->thread->pagedir, frame->upage, false);
-    pinned = false;
-  }
-}
 
 /* TASK 3: Helper function to check if pagedir accessed */
 bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte) {
@@ -95,8 +98,6 @@ bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte) {
         ss->swap_frame = frame;
         ss->swap_addr = (block_sector_t) frame->upage;
         swap_store(ss);
-      } else if(pte->bit_set == MMAP_BIT) {
-          munmap(pte->mapid);
       }
       return true;
   }
@@ -131,7 +132,7 @@ frame_alloc (void * upage, enum palloc_flags flags)
     frame->writable = false;
     frame->thread = thread_current();
 
-    acquire_framelock(); 
+    acquire_framelock();
     /* Initialize frame's page list */
     list_push_back (&eviction_list, &frame->list_elem);
 

@@ -159,12 +159,13 @@ struct thread
     int cpu_num;                        /* Time spent in the CPU recently */
     int nice;                           /* Index of greediness for CPU */
 
-
+#ifdef VM
     /* TASK 3: VM */
     mapid_t mapid;
     struct lock sup_page_table_lock;
     struct hash sup_page_table;
     struct list mmapped_files;
+#endif
 
 	/* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
