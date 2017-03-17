@@ -581,8 +581,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 /* Loads supplementary page table with entries and corresponding file data. */
 static bool
-load_sup_page_table (struct file *file, off_t ofs, uint8_t *upage,
-                     uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
+                 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
@@ -592,14 +592,67 @@ load_sup_page_table (struct file *file, off_t ofs, uint8_t *upage,
 
   while (read_bytes > 0 || zero_bytes > 0)
     {
+      struct frame *f = ft_create_frame (pte, PAL_USER);
+
+
+
+      /* Get a page of memory. */
+      uint32_t *kpage = palloc_get_page (PAL_USER);
+      while (!kpage)
+      {
+        // TODO: Use lock later
+        f = ft_evict_frame ();
+        kpage = palloc_get_page (PAL_ZERO);
+      }
+
+      /* Load this page into physical memory. */
+      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+        {
+          palloc_free_page (kpage);
+          return false;
+        }
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      /* Add the page to the process's address space. */
+      if (!install_page (upage, kpage, writable))
+        {
+          palloc_free_page (kpage);
+          return false;
+        }
+
+      /* Advance. */
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+
+
+      /* Find supplementary page table entry and update. */
+      unsigned page_no = ((unsigned) upage) & S_PTE_ADDR;
+      struct page_table_entry *pte;
+      pte = pt_get_entry (thread_current (), page_no);
+
+      if (!pte)
+        PANIC ("Fatal: Supplementary page table entry not found.");
+
+      lock_acquire (&pte->lock);
+      pte->present = 1;
+      pte->readwrite = writable;
+      pte->frame = frame;
+      pte->type = MMAP;
+
       /* Create and initialise 'file_d' struct. */
-      struct file_d *file_data = malloc (sizeof (struct file_d));
+      struct file_d *file_data   = malloc (sizeof (struct file_d));
+      if (!file_data)
+      {
+        lock_release (&pte->lock);
+        PANIC ("Fatal: Failed to allocate memory for file data.");
+      }
       file_data->file            = file;
       file_data->file_ofs        = ofs;
       file_data->page_read_bytes = read_bytes;
       file_data->page_zero_bytes = zero_bytes;
-
-      /* Create supplementary page table entry. */
+      pte->file_data             = file_data;
+      lock_release (&pte->lock);
 
       // We implement lazy loading
       // (demand paging) and avoid loading a page into memory immediately.
