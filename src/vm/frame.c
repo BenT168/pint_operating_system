@@ -1,6 +1,8 @@
 #include <hash.h>
 #include <list.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
@@ -117,7 +119,7 @@ ft_get_frame_table (void)
 
 /**** CREATION ****/
 
-/* Create a page frame (without actually mapping the entry to the frame). */
+/* Create a page frame (without actually mapping the entry to the frame). Returns a pointer to frame if successful and null otherwise. */
 struct frame*
 ft_create_frame (struct page_table_entry *pte, enum palloc_flags flags)
 {
@@ -125,6 +127,11 @@ ft_create_frame (struct page_table_entry *pte, enum palloc_flags flags)
 
   /* Obtain kernel page. */
   void *kpage = palloc_get_page (flags);
+  if (!kpage)
+  {
+    printf("Failed to obtain kernel page while attempting to create page frame.\n");
+    return NULL;
+  }
 
   /* Initialise frame. */
   f->frame_no = ((unsigned) kpage) & S_PTE_ADDR;
@@ -216,13 +223,16 @@ ft_delete_frame (struct frame *f)
 
 /**** LOADING ****/
 
-/* Loads virtual page of page table entry, 'pte', into page frame. 'flags'
-   indicates what type of page to obtain as well as some other information
-   (see palloc.c and palloc.h). If successful, the function returns a pointer to
-   the page frame to which 'pte' is now mapped. If unsuccessful, the function
-   returns a NULL pointer.
+/* Load helpers. */
+static bool install_page (void *upage, void *kpage, bool writable);
 
-   If 'pte' is already mapped to a page frame, we simply return this page frame.
+/* Loads frame 'f' into memory and associates with page table entry 'pte'. If
+   'pte' is already associated with a frame, we replace this frame with 'f.
+   That is, we have 'pte' point to the new frame 'f' and if  'pte''s old frame
+   is now a ghost frame, we evict it.
+
+   If 'f' is null or the loading procedure fails, we return null. Otherwise we
+   return a pointer to the newly loaded frame.
 
    Each page frame is uniquely associated with a kernel address, so by
    returning a pointer to the page frame instead of the kernel address to which
@@ -231,108 +241,102 @@ ft_delete_frame (struct frame *f)
    pointer and obtain the frame number. Moreover, by returning a pointer to the
    page frame, we obtain access to additional information within the frame
    struct. */
-// TODO: Change documentation.
 struct frame*
 ft_load_frame (struct page_table_entry *pte, struct frame *f)
 {
+  if (!f)
+  {
+    printf("Attempt to load null frame.\n");
+    return NULL;
+  }
   if (!pte)
   {
     printf("Attempt to load null page table entry.\n");
     return NULL;
   }
-  else
+  else if (pte->present)
   {
-    if (pte->present)
-    {
-      /* Entry is already mapped, so return the corresponding page frame. */
-      ASSERT (pte->frame != NULL);
-      return pte->frame;
-    }
-    ASSERT (!pte->present);
-
-    /* Obtain kernel page. */
-    void *kpage = palloc_get_page (PAL_ZERO);
-    while (!kpage)
-    {
-      ft_evict_frame ();
-      kpage = palloc_get_page (PAL_ZERO);
-    }
-
-    /* This is a key insight.
-
-       We should never create (and initialise) a page frame unless there is an
-       actual page table entry pointing it. Frames with no pages pointing to
-       them can be referred to as "ghost frames" and should be throroughly
-       avoided. Not only do they occupy memory unnecessarily, but if they are
-       allowed to exist, they will likely be difficult to track and can easily
-       lead to memory leaks.
-
-       In order to avoid "ghost franes", we make sure that this function,
-       'ft_load', presents the only entry point for the creation and
-       initialisation of page frames. */
-    // TODO: Change above comment
-
-    /* Load segment. */
-
-
-    /* Read virtual page data file into kernel page. */
-    ASSERT ((pte->file_data->page_read_bytes +
-             pte->file_data->page_zero_bytes) % PGSIZE == 0);
-
-    // TODO: Lock needed for synchronisation.
-    /* Load segment (see 'load_segment' in process.c). */
-    struct file_d *f_data = pte->file_data;
-
-    load_segment (f_data->file, f_data->file_ofs, )
-    file_read_at (pte->file_data->file, kpage, PGSIZE,
-                  pte->file_data->file_ofs);
-
-    /* Frame 'f' is not null at this point. */
-    f->frame_no = ((unsigned) kpage) & S_PTE_ADDR;
-    list_init (&f->entries);
-    f->shared = 0;
-    lock_init (&f->lock);
-
-    /* Insert entry into frames list of processes mapping to it. */
-    list_push_back (&f->entries, &pte->frame_elem);
-
-    if (list_size (&f->entries) > 1)
-      f->shared = 1;
-
-    /* Insert frame into list of page frames. */
-    acquire_ft_lock ();
-    hash_insert (page_frames, &f->elem);
-    release_ft_lock ();
-
-    /* Update page table entry. */
+    /* Remove old mapping and create new mapping. */
     lock_acquire (&pte->lock);
+    list_remove (&pte->frame_elem);
 
-    /* Set present bit. */
-    pte->present = 1;
-    /* Set page type to memory-mapped. */
-    pte->type = MMAP;
-    /* Set frame of page table entry. */
+    lock_acquire (&f->lock);
+    list_push_back (&f->entries, &pte->frame_elem);
+    lock_release (&f->lock);
+
     pte->frame = f;
-    /* Page has just been loaded and so is not modified or referenced. */
-    pte->referenced = 0;
-    pte->modified   = 0;
-
-    /* Add mapping in current thread's page tables. */
-    uint32_t *pd = thread_current ()->pagedir;
-    uint32_t *upage = (uint32_t*) (pte->page_no << PGBITS);
-    bool load_success = pagedir_set_page (pd, upage, kpage, pte->readwrite);
-
-    if (!load_success)
-    {
-      printf("Memory allocation failure: cannot update process' individual page tables with new mapping.\n");
-      palloc_free_page (kpage);
-      free (f);
-      lock_release (&pte->lock);
-      PANIC ("Could not loas physical frames.");
-    }
     lock_release (&pte->lock);
-    return pte->frame;
   }
+  /* Obtain kernel page. */
+  uint32_t *kpage = palloc_get_page (PAL_USER);
+  while (!kpage)
+  {
+    ft_evict_frame ();
+    kpage = palloc_get_page (PAL_USER);
+  }
+
+  /* We should never create (and initialise) a page frame unless there is an
+     actual page table entry pointing it. Frames with no pages pointing to
+     them can be referred to as "ghost frames" and should be throroughly
+     avoided. Not only do they occupy memory unnecessarily, but if they are
+     allowed to exist, they will likely be difficult to track and can easily
+     lead to memory leaks. */
+
+  /* Load physical frames. TODO: Check if race condition. */
+  size_t page_read_bytes = pte->file_data->page_read_bytes < PGSIZE ?
+                           pte->file_data->page_read_bytes : PGSIZE;
+  size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+  off_t bytes_read = file_read_at (pte->file_data->file, kpage, page_read_bytes,
+                                   pte->file_data->file_ofs);
+  if (bytes_read != (int) page_read_bytes)
+  {
+    palloc_free_page (kpage);
+    return NULL;
+  }
+  memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+  /* Add page to the process's address space. */
+  void *upage = (void*) (((unsigned) pte->page_no) << PGBITS);
+  if (!install_page (upage, kpage, pte->readwrite))
+  {
+    palloc_free_page (kpage);
+    return false;
+  }
+
+  /* Update frame. */
+  /* Frame 'f' is not null at this point. */
+  f->frame_no = ((unsigned) kpage) & S_PTE_ADDR;
+  list_init (&f->entries);
+  f->shared = 0;
+  lock_init (&f->lock);
+
+  /* Insert entry into frames list of processes mapping to it. */
+  list_push_back (&f->entries, &pte->frame_elem);
+
+  if (list_size (&f->entries) > 1)
+    f->shared = 1;
+
+  /* Insert frame into list of page frames. */
+  acquire_ft_lock ();
+  hash_insert (page_frames, &f->elem);
+  release_ft_lock ();
+
+  /* Update supplementary page table entry. */
+  lock_acquire (&pte->lock);
+
+  /* Set present bit. */
+  pte->present = 1;
+  /* Set page type to memory-mapped. */
+  pte->type = MMAP;
+  /* Set frame of page table entry. */
+  pte->frame = f;
+  /* Page has just been loaded and so is not modified or referenced. */
+  pte->referenced = 0;
+  pte->modified   = 0;
+
+  lock_release (&pte->lock);
+  return pte->frame;
 }
 
 /**** EVICTION ****/
@@ -375,4 +379,24 @@ bool ft_write_to_file (struct page_table_entry *pte)
 {
   //TODO
   return true;
+}
+
+/* Adds a mapping from user virtual address UPAGE to kernel
+   virtual address KPAGE to the page table.
+   If WRITABLE is true, the user process may modify the page;
+   otherwise, it is read-only.
+   UPAGE must not already be mapped.
+   KPAGE should probably be a page obtained from the user pool
+   with palloc_get_page().
+   Returns true on success, false if UPAGE is already mapped or
+   if memory allocation fails. */
+static bool
+install_page (void *upage, void *kpage, bool writable)
+{
+  struct thread *t = thread_current ();
+
+  /* Verify that there's not already a page at that virtual
+     address, then map our page there. */
+  return (pagedir_get_page (t->pagedir, upage) == NULL
+          && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }

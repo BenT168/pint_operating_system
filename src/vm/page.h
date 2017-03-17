@@ -70,8 +70,8 @@ struct page_table_entry
 
   struct lock lock;          /* Lock to implement mutually exclusive access to
                                 page table entry. */
-  struct hash_elem elem;
-  struct list_elem frame_elem;
+  struct hash_elem elem;     /* Elem for frame table. */
+  struct list_elem frame_elem; /* Elem for 'entries' list in frame. */
 };
 
 /* @DEPRECATED */
@@ -122,8 +122,7 @@ pt_create_entry (struct thread *t,
 
 /* Search, insertion, deletion. */
 struct page_table_entry*
-pt_get_entry (struct thread *t,
-              unsigned page_no);
+pt_get_entry (unsigned page_no);
 
 struct page_table_entry*
 pt_insert_entry (struct thread *t,

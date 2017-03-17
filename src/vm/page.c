@@ -173,8 +173,9 @@ pt_create_entry (struct thread *t, void *upage, struct file_d *file_data,
 /* Get a page table entry from the page table (implemented as a hash table),
    returning a pointer to page table entry if it exists and NULL otherwise. */
 struct page_table_entry*
-pt_get_entry (struct thread *t, unsigned page_no)
+pt_get_entry (unsigned page_no)
 {
+  struct thread *t = thread_current ();
   struct hash *pt = pt_get_page_table (t);
   if (!pt)
   {
@@ -183,24 +184,15 @@ pt_get_entry (struct thread *t, unsigned page_no)
     return NULL;
   }
 
-  struct page_table_entry *pte = (struct page_table_entry*)
-                                  malloc (sizeof (struct page_table_entry));
-  if (!pte)
-  {
-    printf("Malloc Failure in function: pt_get_entry\n");
-    return NULL;
-  }
+  struct page_table_entry pte;
+  pte = (struct page_table_entry) {.page_no = page_no, .pid = t->pid};
 
-  pte->page_no = page_no;
-  pte->pid     = t->pid;
-
-  struct hash_elem *h_elem = hash_find (pt, &pte->elem);
+  struct hash_elem *h_elem = hash_find (pt, &pte.elem);
 
   if (!h_elem)
   {
     return hash_entry (h_elem, struct page_table_entry, elem);
   }
-  free (pte);
   return NULL;
 }
 

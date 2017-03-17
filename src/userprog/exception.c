@@ -10,6 +10,7 @@
 #include "threads/pte.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include <debug.h>
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -163,7 +164,7 @@ page_fault (struct intr_frame *f)
 
   /* Obtain page table entry from fault address. */
   unsigned page_no = ((unsigned) fault_addr) & PTE_ADDR;
-  struct page_table_entry *pte = pt_get_entry (thread_current (), page_no);
+  struct page_table_entry *pte = pt_get_entry (page_no);
 
   /* If entry not found, we have a fatal error, since all the process' pages
      should have been loaded into the supplementary page table when the
@@ -184,22 +185,27 @@ page_fault (struct intr_frame *f)
   /* Copy-on-write. */
   if (!not_present)
   {
+    /* Access should have been write. */
+    ASSERT (pte->readwrite);
+
     /* Get frame from page table entry. */
     frame = ft_get_frame (pte);
 
     /* Create new frame using same data. */
     struct frame *copy_frame = ft_copy_frame (frame);
 
-    /* Have page table entry point to new frame. */
-    pte->frame = copy_frame;
+    /* Load frame. */
+    if (!ft_load_frame (pte, copy_frame))
+      PANIC ("Fatal (Page Fault Handler): Frame table load failed");
   }
   else
   {
+    /* Page fault occurred because frame was not present. */
     /* Create new frame. */
     frame = ft_create_frame (pte, PAL_USER);
-  }
 
-  /* Load frame. */
-  if (!ft_load_frame (pte, frame))
-    PANIC ("Fatal (Page Fault Handler): Frame table load failed");
+    /* Load frame. */
+    if (!ft_load_frame (pte, frame))
+      PANIC ("Fatal (Page Fault Handler): Frame table load failed");
+  }
 }

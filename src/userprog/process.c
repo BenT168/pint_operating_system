@@ -18,6 +18,7 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/page.h"
 
 #define MAX_ARGS 50
 
@@ -467,7 +468,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
- success_done:
+ //success_done:
   return success;
 }
 
@@ -577,117 +578,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       upage += PGSIZE;
     }
   return true;
-}
-
-/* Loads supplementary page table with entries and corresponding file data. */
-static bool
-load_segment_vm (struct file *file, off_t ofs, uint8_t *upage,
-                 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
-{
-  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
-  ASSERT (pg_ofs (upage) == 0);
-  ASSERT (ofs % PGSIZE == 0);
-
-  file_seek (file, ofs);
-
-  while (read_bytes > 0 || zero_bytes > 0)
-    {
-      struct frame *f = ft_create_frame (pte, PAL_USER);
-
-
-
-      /* Get a page of memory. */
-      uint32_t *kpage = palloc_get_page (PAL_USER);
-      while (!kpage)
-      {
-        // TODO: Use lock later
-        f = ft_evict_frame ();
-        kpage = palloc_get_page (PAL_ZERO);
-      }
-
-      /* Load this page into physical memory. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          palloc_free_page (kpage);
-          return false;
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable))
-        {
-          palloc_free_page (kpage);
-          return false;
-        }
-
-      /* Advance. */
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
-
-
-      /* Find supplementary page table entry and update. */
-      unsigned page_no = ((unsigned) upage) & S_PTE_ADDR;
-      struct page_table_entry *pte;
-      pte = pt_get_entry (thread_current (), page_no);
-
-      if (!pte)
-        PANIC ("Fatal: Supplementary page table entry not found.");
-
-      lock_acquire (&pte->lock);
-      pte->present = 1;
-      pte->readwrite = writable;
-      pte->frame = frame;
-      pte->type = MMAP;
-
-      /* Create and initialise 'file_d' struct. */
-      struct file_d *file_data   = malloc (sizeof (struct file_d));
-      if (!file_data)
-      {
-        lock_release (&pte->lock);
-        PANIC ("Fatal: Failed to allocate memory for file data.");
-      }
-      file_data->file            = file;
-      file_data->file_ofs        = ofs;
-      file_data->page_read_bytes = read_bytes;
-      file_data->page_zero_bytes = zero_bytes;
-      pte->file_data             = file_data;
-      lock_release (&pte->lock);
-
-      // We implement lazy loading
-      // (demand paging) and avoid loading a page into memory immediately.
-      // That should be performed explicitly by the page fault handler (in
-      // the funtion 'page_fault').
-
-      // Create flags
-      uint32_t p = ~S_PTE_P;  // Not present
-      uint32_t w = writable ? S_PTE_W : ~S_PTE_W;
-      uint32_t r = ~S_PTE_R;  // Not referenced
-      uint32_t m = ~S_PTE_M;  // Not modified
-      uint32_t flags_dword = p & w & r & m;
-
-      struct page_table_entry *spte;
-      spte = pt_create_entry (thread_current (), upage, file_data,
-                              flags_dword, DISK);
-      if (!pte)
-        PANIC ("Fatal: Failed to create entry for supplementary page table");
-
-      /* Insert entry into process supplementary page table. */
-      if(!pt_insert_entry (thread_current (), spte))
-        PANIC ("Fatal: Failed to insert entry into supplementary page table");
-
-      /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-      /* Advance. */
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
-      }
-    return true;
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of
