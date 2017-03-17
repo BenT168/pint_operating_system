@@ -153,6 +153,13 @@ exit (int status)
   printf ("%s: exit(%d)\n", proper_thread_name, status);
 
 
+  /* TASK 2: Allow the file to be written and closed if file exists  */
+  if (cur->file) {
+    file_allow_write(cur->file);
+    file_close (cur->file);
+  }
+
+  /* TASK 3: Deletes all the mapped files dependencies */
   lock_acquire(&mapid_lock);
   struct list *mmaps = &cur->mmapped_files;
   struct list_elem *e = list_begin(mmaps);
@@ -486,6 +493,7 @@ void munmap (mapid_t mapping) {
 
 }
 
+/* TASK 3 : Frees Mapped File */
 void delete_mmap_entry(struct vm_mmap *mmap) {
 
 	struct thread *curr = thread_current();

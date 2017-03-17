@@ -83,24 +83,31 @@ page_table_destroy (struct hash *hash) {
 	hash_destroy(hash, page_action_func);
 }
 
-// Get page table from hash table using key: virtual address
+/* TASK 3: Get page table from hash table using key: virtual address */
 struct page_table_entry*
 get_page_table_entry(struct hash* hash_table, void* vaddr) {
+
+  /* Initialise page table entry */
   struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
+  /* Set page's user address to given address */
   pte->vaddr = vaddr;
 
+  /* Retrive page with user address in page table */
   acquire_pagelock();
   struct hash_elem *h_elem = hash_find(hash_table,  &pte->elem);
   release_pagelock();
 
+  /* If page found with address, then return this page */
   if(h_elem != NULL) {
     return hash_entry(h_elem, struct page_table_entry, elem);
   }
+
+  /* Otherwise, return NULL */
   return NULL;
 }
 
-// Insert page table entry in hash table
+/* TASK 3: Insert page table entry in hash table */
 bool
 insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte) {
   if(pte == NULL) {
@@ -108,34 +115,37 @@ insert_page_table_entry(struct hash* hash_table, struct page_table_entry* pte) {
   }
   bool res = false;
 
+  /* Insert page in page table */
   if(hash_insert(hash_table, &pte->elem) == NULL) {
     res = true;
   }
-
   return res;
 }
 
-
+/* TASK 3: Loads the frame into physical memory */
 bool
 load_page(struct page_table_entry* pte) {
   bool res = false;
-  //Check if page already loaded
+  /* Check if page already loaded */
   if(pte->loaded) {
     return true;
   }
+
+  /* Switch on cases of the pages's bit set */
   switch (pte->bit_set) {
     case FILE_BIT :
     case MMAP_BIT: res = load_file(pte); break;
     case SWAP_BIT : res =  load_swap(pte); break;
   }
-
   return res;
-
 }
-// Load page from file_d in page table
+
+/* TASK 3: Loads frame into physical memory when executable or memory
+          mapped file */
 bool
 load_file(struct page_table_entry* pte) {
 
+  /* Get data from page table entry */
   struct file_d* file_d = pte->page_sourcefile;
   struct file* file = file_d->filename;
   int offset = file_d->file_offset;
@@ -143,6 +153,7 @@ load_file(struct page_table_entry* pte) {
   int zero_bytes = file_d->zero_bytes;
   int read_bytes = file_d->read_bytes;
 
+  /* Seek the file */
   file_seek(file, offset);
 
   // Allocate user page
@@ -153,37 +164,29 @@ load_file(struct page_table_entry* pte) {
     flag = PAL_USER;
   }
 
-  /*printf("\n");
-  printf("load_file read_bytes: %d\n", read_bytes);
-  printf("load_file zero_bytes: %d\n", zero_bytes);
-  printf("load_file offset: %d\n", offset);
-  printf("load_file upage: %d\n", upage);
-  printf("load_file writable: %d\n", pte->writable);
-  printf("\n");*/
-
   void* frame = frame_alloc(upage, flag);
   if(frame == NULL) {
     return false;
   }
 
-  // Load page
+  /* Load page */
   int bytes_read = file_read(file, frame, read_bytes);
 
   if(bytes_read != read_bytes) {
-    // File not read properly, so free frame and return false
+    /* File not read properly, so free frame and return false */
     frame_free(frame);
     return false;
   }
-  // zero out memory
+  /* zero out memory */
   if (zero_bytes > 0) {
     memset(frame + read_bytes, 0, zero_bytes);
   }
 
-  // Add the page to the current process address space - add mapping
-  // from vaddr to frame
+  /* Add the page to the current process address space - add mapping
+     from vaddr to frame */
   bool set_page = install_page(pte->vaddr, frame, pte->writable);
   if(!set_page) {
-    // Page not set properly, so free frame and return false
+    /* Page not set properly, so free frame and return false */
     frame_free(frame);
     return false;
 
@@ -193,40 +196,42 @@ load_file(struct page_table_entry* pte) {
   return true;
 }
 
-// load swap page
+/* TASK 3: Loads frame into physical memory when swap */
 bool
 load_swap(struct page_table_entry* pte) {
   if(!(pte->bit_set == SWAP_BIT || pte->bit_set == FILE_BIT)) {
     return false;
   }
 
- // Allocate user page
+  /* Allocate user page */
   void* upage = pte->vaddr;
   void* frame = frame_alloc(upage, PAL_USER);
   if (frame == NULL) {
     return false;
   }
-  // Add the page to the current process address space - add mapping
-  // from vaddr to frame
+  /* Add the page to the current process address space - add mapping
+    from vaddr to frame */
   bool set_page = install_page(pte->vaddr, frame, pte->writable);
 
+  /* Get frame at address specified */
   struct frame *f = frame_get(frame);
 
   if(!set_page) {
-    // Page not set properly, so free frame and return false
+    /* Page not set properly, so free frame and return false */
     frame_free(frame);
     return false;
   }
 
   f->writable = true;
 
-  // Swap from disk -> memory
+  /* Swap from disk -> memory */
   struct swap_slot* ss = (struct swap_slot*)malloc(sizeof(struct swap_slot));
   ss->swap_addr = pte->swap_index;
   swap_load(pte->vaddr, ss);
   memset (f + pte->page_sourcefile->read_bytes, 0, pte->page_sourcefile->zero_bytes); // Set 0 bits at end of file if required
   f->writable = false;
 
+  /* Update page */
   pte->phys_addr = frame;
   pte->bit_set = FILE_BIT;
   pte->loaded = true;
@@ -235,7 +240,7 @@ load_swap(struct page_table_entry* pte) {
 }
 
 
-// Inserts file in page table
+/* TASK 3 : Inserts page in page table */
 bool
 insert_file(struct file* file, off_t offset, uint8_t *upage,
                              uint32_t read_bytes, uint32_t zero_bytes,
@@ -243,13 +248,16 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
   struct thread* curr = thread_current();
   struct page_table_entry* pte = (struct page_table_entry*)malloc(sizeof(struct page_table_entry));
 
+  /* Check that page table entry has initialised properly */
   if(pte == NULL) {
     return false;
   }
 
+  /* Build up page table entry */
   pte->bit_set = bit_set;
   pte->vaddr = upage;
 
+  /* Build up page table entry's file data */
   struct file_d* file_d = (struct file_d*)malloc(sizeof(struct file_d));
   file_d->filename = file;
   file_d->file_offset = offset;
@@ -260,7 +268,7 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
   pte->loaded = false;
   pte->writable = writable;
 
-  // Check for memory mapped files
+  /* Check for memory mapped files */
   if(bit_set == MMAP_BIT) {
     pte->writable = true;
     pte->mapid = curr->mapid;
@@ -271,7 +279,7 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
   }
 
   bool success = false;
-  // Check if kernel pages currently mapeed to upage
+  /* Check if kernel pages currently mapeed to upage */
   if(pagedir_get_page(curr->pagedir, upage) == NULL) {
     success = insert_page_table_entry(&curr->sup_page_table, pte);
   }
@@ -279,42 +287,49 @@ insert_file(struct file* file, off_t offset, uint8_t *upage,
 }
 
 
-// Function for stack growth
+/* TASK 3: Function for stack growth */
 bool
 grow_stack(void* vaddr) {
 
+  /* Check that address is valid */
   if((size_t)(PHYS_BASE - pg_round_down(vaddr) > MAXI_STACK_SIZE)) {
     return false;
   }
 
+  /* Initialise page table entry */
   struct page_table_entry *pte = malloc(sizeof(struct page_table_entry));
 
   if (pte == NULL) {
     return false;
   }
-
     void* round_vaddr = pg_round_down(vaddr);
+
+    /* Build up page table entry at vaddr */
     pte->vaddr = round_vaddr;
     pte->loaded = true;
     pte->writable = true;
     pte->bit_set = SWAP_BIT;
 
+    /* Get a frame using frame allocate */
     uint8_t *frame = frame_alloc(round_vaddr, PAL_USER);
 
+    /* If frame is NULL, then free page */
     if(frame == NULL) {
       free_pte(pte);
       return false;
     }
 
-    uint32_t* pd = thread_current()->pagedir;
-    bool set_page = pagedir_set_page(pd, round_vaddr, frame, pte->writable);
+    /* Check that frame is accessed */
+    bool set_page = install_page(pte->vaddr, frame, pte->writable);
 
+    /* If frame not accessed, then free page table entry */
     if(!set_page) {
       free(pte);
       frame_free(frame);
       return false;
     }
 
+    /* Add the page to the current thread's page table */
     if(hash_insert(&thread_current()->sup_page_table, &pte->elem) == NULL) {
       return true;
     }
@@ -322,6 +337,7 @@ grow_stack(void* vaddr) {
     return false;
 }
 
+/* TASK 3: Adds a new vm_mmap_struct to thread_current()'s mapped files */
 bool
 check_mmap(struct page_table_entry *pte) {
 	struct thread *cur = thread_current();
@@ -333,6 +349,7 @@ check_mmap(struct page_table_entry *pte) {
 	  return false;
 	}
 
+  /* Build up mmap struct */
 	mmap->mapid = cur->mapid;
 	mmap->pte = pte;
 
@@ -341,28 +358,12 @@ check_mmap(struct page_table_entry *pte) {
 	return true;
 }
 
-// Freeing supplementary page table entry
+/* TASK 3: Freeing supplementary page table entry */
 void
 free_pte(struct page_table_entry* pte) {
   free(pte->vaddr);
   free(pte->phys_addr);
   if (pte->page_sourcefile) {
-       free(pte->page_sourcefile);
-  }
-}
-
-void
-remove_pte(struct hash* page_table, struct page_table_entry* pte) {
-  struct hash_iterator iter;
-  hash_first(&iter, page_table);
-
-  void* addr = pte->vaddr;
-
-  while (hash_next(&iter)) {
-    struct page_table_entry *page = hash_entry(hash_cur(&iter), struct page_table_entry, elem);
-    if(page->vaddr == addr) {
-      hash_delete(page_table, &page->elem);
-      break;
-    }
+    free(pte->page_sourcefile);
   }
 }

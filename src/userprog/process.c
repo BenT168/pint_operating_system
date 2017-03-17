@@ -241,13 +241,6 @@ process_exit (void)
     list_remove (&cur->child_elem);
   }
 
-  /* TASK 2: Allow the file to be written and closed if file exists  */
-  if (cur->file) {
-    file_allow_write(cur->file);
-    file_close (cur->file);
-  }
-
-
   /* TASK 2: unblock parent thread */
   sema_up (&cur->alive_sema);
 
@@ -565,17 +558,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Insert file in page table */
       bool file_inserted = insert_file (file, ofs, upage, page_read_bytes,
                                  page_zero_bytes, writable, FILE_BIT);
-    /*  printf("\n");
-
-      printf("load_segment read_bytes: %d\n", page_read_bytes);
-      printf("load_segment zero_bytes: %d\n", page_zero_bytes);
-      printf("load_segment offset: %d\n", ofs);
-      printf("load_segment upage: %d\n", upage);
-      printf("load_segment writable: %d\n", writable);
-      printf("\n");
-*/
-
-
 
       if (!file_inserted) {
         printf("Failed file insert in load_segemnt_vm\n");
@@ -599,27 +581,12 @@ static bool
 setup_stack (void **esp)
 {
    bool success = false;
-
    success = grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
    if(success){
        *esp = PHYS_BASE;
    }
    return success;
 
-/*
-  uint8_t *kpage;
-  kpage = frame_alloc (PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
-  //printf("kpage: %d\n", kpage);
-  if(kpage != NULL) {
-    success = grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
-    if (success) {
-      *esp = PHYS_BASE;
-    } else {
-      frame_free(kpage);
-    }
-    return success;
-  }
-*/
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

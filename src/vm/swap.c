@@ -35,7 +35,7 @@ release_swaplock (void)
   lock_release (&swap_lock);
 }
 
-
+/* TASK 3: initialises swap table and values */
 void
 swap_init ()
 {
@@ -72,7 +72,6 @@ block_sector_t swap_get_free ()
   if (isFull)
   {
     PANIC("SWAP id full! Memory exhausted!");
-    //return NULL;
   }
   return bitmap_scan_and_flip (swap_bitmap, 0, NBR_BLOCKS, NULL);
 }
@@ -90,17 +89,18 @@ swap_load (void *upageaddr, struct swap_slot* ss)
 
 
 /* TASK 3 : Store the swapping address by writing into the block device */
-void
-swap_store (struct swap_slot * ss)
+size_t
+swap_store (void *vaddr)
 {
   acquire_swaplock();
   block_sector_t swap_addr = swap_get_free();
   for (int i = 0; i < NBR_BLOCKS; i++)
-    block_write (swap_space, swap_addr + i, ss->swap_frame->upage + i *BLOCK_SECTOR_SIZE);
+    block_write (swap_space, swap_addr + i, vaddr + i *BLOCK_SECTOR_SIZE);
   release_swaplock();
+  return (size_t) swap_addr;
 }
 
-/* TASK 3: free swap slots */
+/* TASK 3: Free swap slots */
 void
 swap_free (struct swap_slot* ss)
 {

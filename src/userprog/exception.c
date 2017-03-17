@@ -21,9 +21,7 @@
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
-static int user_exc_count;
 
-static bool is_pointer_valid(const uint8_t *);
 static bool is_stack_access (void *, void *);
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
@@ -35,22 +33,6 @@ static bool
 is_stack_access (void *addr, void *esp)
 {
   return (addr >= esp - INSTR_SIZE) && (PHYS_BASE - pg_round_down (addr) <= MAX_STACK_SIZE);
-}
-
-/*This function checks if a pointer is valid
- * by using the get_user function on each byte of the pointer
- */
-static bool
-is_pointer_valid(const uint8_t * pointer) {
-
-  int result;
-  if(pointer >= PHYS_BASE || pointer == NULL || pointer < 0) {
-	  return false;
-  }
-  asm ("movl $1f, %0; movzbl %1, %0; 1:"
-	: "=&a" (result) : "m" (pointer));
-
-  return !(pointer == 0xffffffff);
 }
 
 
@@ -201,28 +183,29 @@ page_fault (struct intr_frame *f)
 		exit(-1);
 	}
 
-
-  /* TASK 3 : TO COMMENT */
+  /* TASK 3 : Loading Page and Grows the Stack */
 
   bool load = false;
 
   if(not_present && fault_addr > USER_VADDR_BOTTOM && is_user_vaddr(fault_addr)) {
 
     struct thread* curr = thread_current();
-
     void* vaddr = pg_round_down(fault_addr);
 
+    /* Get page at address */
     struct page_table_entry* pte = get_page_table_entry(&curr->sup_page_table, vaddr);
 
+    /* If page is not null, then load page in physical memory */
     if(pte != NULL) {
       load = load_page(pte);
+    /* If page not found, then check if address is valid in stack */
     } else if (is_stack_access(fault_addr, f->esp)) {
         load = grow_stack(fault_addr);
     }
     return;
   }
 
-
+  /* If page not loaded from physical memory, then page fault and kill */
   if (!load) {
     printf ("Page fault at %p: %s error %s page in %s context.\n",
 			  fault_addr,
@@ -231,5 +214,4 @@ page_fault (struct intr_frame *f)
 			  user ? "user" : "kernel");
     kill (f); // kill if page is not loading
   }
-  //lock_release(&page_lock);
 }

@@ -17,20 +17,20 @@ struct frame
   bool writable;                       /* boolean checking whether the frame
                                           table is writable */
   struct list_elem list_elem;          /* Used to store the frame in the page table. */
+  struct lock single_frame_lock;       /* Lock for synchronisation */
 };
 
 struct file_d
 {
-  struct file *filename;
-  int file_offset;
-  size_t read_bytes;
-  size_t zero_bytes;
+  struct file *filename;               /* File associated with frame */
+  int file_offset;                     /* Offset of the file */
+  size_t read_bytes;                   /* Bytes to read in file */
+  size_t zero_bytes;                   /* Bytes to set to sero in file */
 };
 
 void frame_init (void);
 void* frame_evict (enum palloc_flags flags);
-void check_pagedir_accessed(struct frame* frame);
-bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte);
+bool check_pagedir_not_dirty(struct frame* frame, struct page_table_entry* pte);
 void* frame_alloc(void * upage, enum palloc_flags flags);
 struct frame* frame_get(void *addr);
 void frame_free (void * addr);

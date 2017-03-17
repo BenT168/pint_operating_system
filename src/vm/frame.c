@@ -49,47 +49,69 @@ frame_evict (enum palloc_flags flags)
   struct page_table_entry* pte = get_page_table_entry(&victim->thread->sup_page_table
   , victim->upage);
 
+  lock_acquire(&victim->single_frame_lock);
   while(true) {
-    bool accessable = true;
     if(!victim->writable){
-        if(pagedir_is_accessed (victim->thread->pagedir, victim->upage)) {
-            pagedir_set_accessed (victim->thread->pagedir, victim->upage, false);
-            accessable = false;
+        bool accessable = true;
+        for (e = list_begin(&eviction_list); e != list_end(&eviction_list); e = list_next(e)){
+          /* Check that the frame has been accessed */
+          if(pagedir_is_accessed (victim->thread->pagedir, victim->upage)) {
+              pagedir_set_accessed (victim->thread->pagedir, victim->upage, false);
+              accessable = false;
+          }
+        }
+        if (accessable) {
+          for (e = list_begin(&eviction_list); e != list_end(&eviction_list); e = list_next(e)){
+            /* If frame has been accessed and has a MMAP_BIT, then unmap */
+            if(accessable && pte->bit_set == MMAP_BIT ) {
+                    munmap(pte->mapid);
+                    goto mmap;
+            }
+            break;
+          }
         }
     }
-    if(accessable && pte->bit_set == MMAP_BIT ) {
-            munmap(pte->mapid);
-            goto mmap;
-    }
 
-    if(check_pagedir_dirty(victim, pte)) {
-        pte->loaded = false;
-        list_remove(e);
-        remove_pte(&victim->thread->sup_page_table, pte);
-        pagedir_clear_page(victim->thread->pagedir, victim->upage);
-        frame_free(victim);
-        break;
-    }
-    e = list_next (e);
-    if (e == list_end (&eviction_list)) {
+    if ( e == list_end (&eviction_list)) {
       e = list_begin (&eviction_list);
     }
     victim = list_entry (e, struct frame, list_elem);
   }
+
+  lock_release(&victim->single_frame_lock);
+
+  /* If frame has not been modified and not been accessed */
+  if(check_pagedir_not_dirty(victim, pte)&& !pagedir_is_accessed (victim->thread->pagedir, victim->upage)) {
+        pte->loaded = false;
+        acquire_framelock();
+        list_remove(e);
+        list_push_back(&eviction_list, e);
+        release_framelock();
+  }
+
   mmap:
-  return  palloc_get_page(flags);
+  acquire_framelock();
+  victim = palloc_get_page(flags);
+  release_framelock();
+
+  return victim;
 }
 
 
 /* TASK 3: Helper function to check if pagedir accessed */
-bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte) {
-  if(pagedir_is_dirty(frame->thread->pagedir, frame->upage)) {
+bool check_pagedir_not_dirty(struct frame* frame, struct page_table_entry* pte) {
+  /* Check if frame has not been modified */
+  if(!pagedir_is_dirty(frame->thread->pagedir, frame->upage)) {
+      /* If page table entry is a SWAP_BIT, then swap frame out */
       if(pte->bit_set == SWAP_BIT) {
         struct swap_slot* ss = (struct swap_slot*)malloc(sizeof(struct swap_slot));
         ss->swap_frame = frame;
-        ss->swap_addr = (block_sector_t) frame->upage;
-        swap_store(ss);
+        size_t index = swap_store(frame->upage);
+        ss->swap_addr = index;
+        pagedir_clear_page(frame->thread->pagedir, pte->vaddr);
       }
+      /* Free the frame */
+      frame_free(frame);
       return true;
   }
   return false;
@@ -100,7 +122,9 @@ bool check_pagedir_dirty(struct frame* frame, struct page_table_entry* pte) {
 void*
 frame_alloc (void * upage, enum palloc_flags flags)
 {
+  acquire_framelock();
   void* kpage = palloc_get_page(flags);
+  release_framelock();
 
   /* evict a frame if not enough memory or
   Check that frame not mapped to kernel page */
@@ -117,17 +141,14 @@ frame_alloc (void * upage, enum palloc_flags flags)
     frame->frame_sourcefile = malloc(sizeof(struct file_d));
     frame->writable = false;
     frame->thread = thread_current();
+    lock_init(&frame->single_frame_lock);
 
     /* Initialize frame's page list */
     acquire_framelock();
     list_push_back (&eviction_list, &frame->list_elem);
     release_framelock();
   }
-
-
-
   return kpage;
-
 }
 
 
@@ -136,10 +157,11 @@ void
 frame_free (void * addr)
 {
   acquire_framelock();
+  /* Get frame mapped to address and unmap the address */
   struct frame *frame = frame_get(addr);
-  release_framelock();
   list_remove (&frame->list_elem);
   palloc_free_page(addr);
+  release_framelock();
   if (frame->frame_sourcefile) {
 	     free(frame->frame_sourcefile);
   }
@@ -149,6 +171,7 @@ frame_free (void * addr)
 /* TASK 3: Returns pointer to vm_frame given kernel address */
 struct frame* frame_get(void *addr) {
 	struct list_elem *elem;
+  /* Go through eviction list and get frame with the address addr */
 	for (elem = list_begin(&eviction_list); elem != list_end(&eviction_list);
 		 elem = list_next(elem)) {
 			struct frame *fr = list_entry(elem, struct frame, list_elem);
@@ -156,5 +179,6 @@ struct frame* frame_get(void *addr) {
 				return fr;
 			}
 	}
+  /* If no frame found with address addr, then return NULL */
 	return NULL;
 }
