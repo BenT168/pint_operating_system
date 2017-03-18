@@ -165,6 +165,13 @@ start_process (void *file_name_)
   /* TASK 2 : Push a fake return address (0) */
   if_.esp -= sizeof(void (*) (void));
 
+  /* TASK 3: Initialise (global) supplementary page table with process'
+     pages. */
+
+  /* We use demand paging, so no pages should be loaded into the individual
+     process page directory. */
+
+
   /* Start the user process by simulating a return from an
 interrupt, implemented by intr_exit (in
 threads/intr-stubs.S). Because intr_exit takes all of its
